@@ -1,0 +1,119 @@
+X:1
+%%MIDI program 23
+%%MIDI chordprog 20
+%%MIDI bassprog 0
+%%MIDI chordvol 62
+%%MIDI bassvol 60
+Q:1/4=180
+T:Aiken Drum
+% Nottingham Music Database
+F: http://www.youtube.com/watch?v=69nHJQzjSBM
+F: http://www.youtube.com/watch?v=pphaOh-Xnho
+S:via PR
+R: Reel
+M:4/4
+L:1/4
+K:A
+A/2B/2|"A"cc d/2c/2B/2A/2|"D"F2 A3/2F/2|"A"E3/2F/2 AE|"B7"cB "E7"BA/2B/2|\
+"A"cc d/2c/2B/2A/2|"D"F2 A3/2F/2|"E7"EE FG|"A"A3::
+A/2B/2|"A"cc cB/2A/2|"D"dd f3/2d/2|"A"ce cA|"Bm"cB "E7"BA/2B/2|\
+"A"cc d/2c/2B/2A/2|"D"F2 A3/2F/2|"E7"EE FG|"A"A3:|
+W:
+W:Nottingham Music Database
+
+X:2
+%%MIDI program 25
+%%MIDI chordprog 20
+%%MIDI bassprog 0
+%%MIDI chordvol 62
+%%MIDI bassvol 60
+Q:1/4=240
+T:Alabama Jubilee
+% Nottingham Music Database
+F: http://www.youtube.com/watch?v=k59g3pX-C_s
+F: http://www.youtube.com/watch?v=ozWypBp2li4
+S:Trad, via EF
+R: Reel
+M:4/4
+L:1/4
+K:G
+d^c d|"E7"ed Be-|"E7"ed2B|"E7"ed Be-|"E7"e4|"A7"e^c Ae-|"A7"e^c2A|"A7"e^c Ae-|
+"A7"e^d e_f|"D7"f^e f=e-|"D7"ed2e|"D7"f^e f=e-|"D7"ed ef|"G"g2 eg|"G"ed Bd|
+"G"g4-|"G"gd ^cd|"E7"ed Be-|"E7"ed2B|"E7"ed Be-|"E7"e4|"Am"A^G AB|"Am"cB cd|
+"Am"e2 e2|"D7"ef ga|"G"b4|"B7"a4|"Em"g2 "D"e2|"G"d2 cd|"A7"eg eg|"D7"f2 d2|\
+"G"g4|"G"g||
+W:
+W:Nottingham Music Database
+
+X:3
+%%MIDI program 21
+%%MIDI chordprog 23
+%%MIDI bassprog 32
+%%MIDI chordvol 62
+%%MIDI bassvol 60
+Q:1/4=210
+T:All The Way To Galway
+% Nottingham Music Database
+F: http://www.youtube.com/watch?v=Lv5Qya2cJVE
+S:Kevin Briggs, via EF
+R: Reel
+M:4/4
+L:1/4
+K:D
+P:A
+F/2G/2|"D"A3/2B/2 AG|"D"FA d2|"Em"EF GF|"A7"EF G^G|"D"A3/2B/2 AG|"D"FA d2|\
+"A7"cA GE|"D"D2 D:|
+P:B
+A|"D"d3/2e/2 fd|"A"cA A2|"G"BG G/2A/2B/2G/2|"D"BA "A7"A2|"D"d3/2e/2 fd|\
+"A"ca a3/2a/2|"G"ba "A7"ge|"D"d3:|
+W:
+W:Nottingham Music Database
+
+X:4
+%%MIDI program 25
+%%MIDI chordprog 1
+%%MIDI bassprog 0
+%%MIDI chordvol 62
+%%MIDI bassvol 60
+Q:1/4=240
+T:Angeline The Baker
+% Nottingham Music Database
+S:Texas Old Time, via PR
+R: Reel
+F: http://www.youtube.com/watch?v=rA0NMuxfAYo
+F: http://www.youtube.com/watch?v=TfnBl4FPnJc
+M:4/4
+L:1/4
+K:D
+|:d/2B/2|"D"AB d3/2A/2|Bd2d/2B/2|AB d/2B/2A|"G"B3d/2B/2|"D"AB d3/2e/2|\
+"D"fe "Bm"d3/2e/2|"G"fe dB|"A7"A3/2B/2 A::
+f/2g/2|"D"af ed/2e/2|fe df/2g/2|"D7"af ed|"G"B3/2B/2 Bf/2g/2|
+"D"af ed/2e/2|"Bm"fe dd/2e/2|"D"fe "G"dB|"A"A3/2B/2 A:|
+W:
+W:Nottingham Music Database
+
+X:5
+%%MIDI program 25
+%%MIDI chordprog 1
+%%MIDI bassprog 0
+%%MIDI chordvol 62
+%%MIDI bassvol 60
+Q:1/4=180
+T:Applejack's Reel
+% Nottingham Music Database
+S:Bob McQuillen March 77, via PR
+R: Reel
+F: http://www.youtube.com/watch?v=v9HnS5PnJD0
+M:4/4
+L:1/4
+K:D
+A,/2B,/2|"D"DE/2F/2 DE/2F/2|"D"D/2E/2F/2A/2 "G"Bd|"D"DE/2F/2 D/2E/2F/2A/2|\
+"G"B/2d/2A/2F/2 "A7"E/2G/2F/2E/2|
+"D"DE/2F/2 DE/2F/2|"D"D/2E/2F/2A/2 "G"Bd|"D"d/2e/2f/2d/2 "Em"e/2d/2B/2d/2|\
+"A7"A/2F/2E/2F/2 "D"D::
+A/2B/2|"D"d/2e/2d/2B/2 "A7"Ad/2e/2|"D"f/2d/2e/2f/2 "G"e/2d/2B/2d/2|\
+"D"d/2e/2d/2B/2 "A7"Ad/2B/2|"D"A/2d/2A/2F/2 "A7"EA/2B/2|
+"D"d/2e/2d/2B/2 "A7"Ad/2e/2|"D"f/2d/2e/2f/2 "Em"e/2d/2B/2d/2|\
+"G"d/2e/2d/2B/2 "D"A/2d/2A/2F/2|"A7"E/2D/2E/2F/2 "D"D:|
+W:
+W:Nottingham Music Database

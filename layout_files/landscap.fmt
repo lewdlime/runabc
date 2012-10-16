@@ -1,0 +1,32 @@
+
+
+% Format for music in US 8.5x11 "letter" mode
+
+	scale         0.65
+	maxshrink     1.0
+
+	pageheight    28.0cm
+	staffwidth    18.8cm
+#	staffwidth    18.2cm
+
+	topmargin     0.1cm
+	botmargin     0.5cm
+	leftmargin    1.7cm
+#	leftmargin    2.0cm
+
+	topspace      0.0cm
+	titlespace    0.5cm
+	subtitlespace 0.0cm
+	composerspace 0.1cm
+	musicspace    0.2cm
+	partsspace    0.2cm
+
+	staffsep      45
+	lineskipfac   1.1
+
+	titlefont     Helvetica-Bold 16
+	subtitlefont  Helvetica-Bold 14
+	partsfont     Helvetica-Bold 12
+	wordsfont     Times-Roman    12
+	vocalfont     Times-Bold     13
+	gchordfont Helvetica-Bold 14

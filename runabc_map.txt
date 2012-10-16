@@ -1,0 +1,489 @@
+
+
+# Part 1.0                Tooltip
+proc ::tooltip::tooltip {w args} {
+proc ::tooltip::register {w args} {
+proc ::tooltip::clear {{pattern .*}} {
+proc ::tooltip::show {w msg {i {}}} {
+proc ::tooltip::menuMotion {w} {
+proc ::tooltip::hide {args} {
+proc ::tooltip::wname {{w {}}} {
+proc ::tooltip::itemTip {w args} {
+proc ::tooltip::enableCanvas {w args} {
+
+
+# Part 2.0       Start up
+proc messages {msg} {
+proc platform {} {
+proc midi_init {} {
+proc write_runabc_ini {} {
+proc read_runabc_ini {} {
+proc is_runabc_here {} {
+
+
+# Part 3.0               images
+
+
+# Part 4.0   Control Buttons
+
+
+# Part 5.0          TOC
+proc startup_progress {message} {
+proc button_label_action {} {
+proc show_button_labels {loc} {
+
+
+# Part 6.0	Core Functions
+proc play_action {} {
+proc play_midis {sel} {
+proc display_action {} {
+proc display_tunes {abcfile} {
+proc display_tunes_thru_x_tmp {abcfile} {
+proc midisave {} {
+proc midisave_single {} {
+proc midisave_list {} {
+proc midisave_list_continue {} {
+proc midisave_tool {} {
+proc update_history {openfile} {
+proc process_history {} {
+proc file_browser {} {
+proc open_abc_file {filename} {
+
+
+# Part 7.0       TOC creator
+proc title_index {abcfile} {
+proc SortBy {col direction} {
+proc title_selected {} {
+proc get_nonblank_line {handle} {
+proc get_next_line {handle} {
+
+
+# Part 8.0              Extract Tune
+proc find_X_code {handle} {
+proc get_title {handle} {
+proc  init_voicecodebook {} {
+proc vcode2numb {code} {
+proc tune_picked {tunes abcfile} {
+proc write_midi_codes {outfd} {
+
+
+# Part 9.0                     Functions for Manipulating abc tune file
+proc copy_selection_to_file {tunes abcfile outfile} {
+proc extract_title_of_first_tune {tunes abcfile} {
+proc extract_title_of_tune {tune abcfile} {
+proc split_abc_file {} {
+proc edit_new_tune {} {
+proc edit_empty_file {} {
+proc start_copy_selected_files {access renumber} {
+proc copy_message {} {
+proc copy_selected_files {sel access renumber filename} {
+proc concat_parts {tunes abcfile outfile} {
+proc combine_parts {} {
+proc abc_edit {varname} {
+
+
+# Part 10.0            Abc Editor Functions
+proc confirm_save {} {
+proc startup_tcl_abc_edit {} {
+proc tcl_abc_edit {abcfile} {
+proc tcl_abc_edit_menu_bar {abcfile} {
+proc tcl_abc_edit_copy_global_header {} {
+proc tcl_abc_edit_save {} {
+proc tcl_abc_edit_save_as {} {
+proc find_forwards {} {
+proc find_backwards {} {
+proc locate_barnum {} {
+proc find_barnum {} {
+proc find_frame {} {
+proc shift_to_next_bar {} {
+proc shift_to_previous_bar {} {
+proc erase_all {} {
+proc set_abc_save {} {
+proc Text_Dump {t {start 1.0} {end end}} {
+proc tag_text {} {
+proc tag_line {} {
+proc tag_text_line {no} {
+proc tag_bar_lines {lineno line} {
+proc tag_guitar_chords {lineno line} {
+proc play_from_edit_window {mode} {
+
+
+# Part 10.1               Guitar Chord ToolBox
+proc setkeymap {sf} {
+proc showkeys {from} {
+proc keytosf {keysig} {
+proc shift_note_wrap {note shift} {
+proc guitar_toolbox {keysig} {
+proc qualifychord {{typeno ""}} {
+proc invertchord order {
+proc possible_progression {} {
+proc insert_chord {chord} {
+proc guitar_chord {} {
+
+
+# Part 10.2             Transposition ToolBox
+proc shift_note_up {} {
+proc shift_note_down {} {
+proc shift_single_note {shift} {
+proc shift_all_notes {buffer shift} {
+proc shift_note {note shift} {
+
+
+# Part 10.3             Note Length ToolBox
+proc note_length_value {len} {
+proc combinefractions {frac1 frac2 dir} {
+proc euclid {a b} {
+proc expand_notelength {length} {
+proc contract_notelength {length} {
+proc expand_contract_note {dir} {
+
+
+# Part 10.4           Editor Clean Functions
+proc remove_guitar_chords {line dummy} {
+proc remove_redundant_guitar_chords {buffer dummy} {
+
+
+# Part 10.5           Process Editor Buffer
+proc process_buffer {action param} {
+proc process_region {action param} {
+
+
+# Part 10.6                Grace Notes ToolBox
+proc grace_toolbox {} {
+proc grace_cfg {} {
+proc reset_grace_cfg {} {
+proc make_grace {base sequence} {
+proc grace_note {sequence} {
+proc remove_grace_notes {buffer dummy} {
+proc remove_these_grace_notes_if_any {} {
+
+
+# Part 10.7                   Chords ToolBox
+proc notes2chords {buffer shift} {
+
+
+# Part 11.0                   Show Summary Sheet ,tmpfile and message sheet
+proc show_tmpfile {} {
+proc make_summary_toplevel {} {
+proc show_summary {i} {
+proc show_message_page {text wrapmode} {
+proc run_abc2abc {} {
+proc remove_old_sheet {} {
+proc show_other_ps {} {
+proc show_ps_page {type} {
+proc show_abc2abc_page {} {
+proc show_midi_page {subsection} {
+proc remove_midi_page {} {
+proc show_voice_page {} {
+proc show_titles_page {} {
+proc show_config_page {subsection} {
+proc show_configure_abcmidi_packages {} {
+proc show_extract_page {} {
+proc remove_cfg_page {} {
+proc remove_extract_page {} {
+proc setpath {path_var} {
+proc locate_abcmidi_executables {} {
+proc yaps_papersize {size} {
+proc show_my_style {} {
+proc change_font {usesamplefont} {
+proc reset_font {} {
+proc gchord_select {p1 p2} {
+proc setabclev {vol} {
+proc reset_advanced_midi {} {
+proc voice_button {num X Y} {
+proc my_popup {rootx rooty} {
+proc program_select {p1 p2} {
+proc forcekeymenu {fsf} {
+proc switch_ps_button {} {
+
+
+# Part 13.0                  Help texts
+proc contexthelp {} {
+
+
+# Part 14.0           Drum Editor
+proc drum_editor {} {
+# This function and others are nested in proc drum_editor
+  proc parse_drum_string {input} {
+  proc break_drumentry {drumentry} {
+  proc changeprog {} {
+  proc make_drumstring {} {
+  proc make_trial_abc_file {} {
+  proc play_drum_test {} {
+  proc paste_drumstring {} {
+
+
+# Part 15.0           Title Search functions
+proc find_window {} {
+proc search_string_in_title {abcfile filenum} {
+proc show_file {loc} {
+proc rglob {pattern} {
+proc title_match {} {
+proc stopsearching {} {
+proc get_version_number {executable} {
+
+
+# Part 16.0        Abcmatcher interface
+proc check_abcmatch_version {version} {
+proc match_window {} {
+proc setres {value} {
+proc set_match_selection {value} {
+proc set_match_method {value} {
+proc pop_matcher_results {} {
+proc create_match.abc {} {
+proc start_matcher {} {
+proc stop_matcher {} {
+proc run_matcher {} {
+proc run_glob_matcher {} {
+proc record_matched_tunes {filename minlength} {
+proc copy_tune {abchandle} {
+proc highlight_selected_bars {bars} {
+proc find_xref_in_file {abchandle xref filename} {
+proc match_file_browser {} {
+proc match_dir_browser {} {
+proc show_match_file {filename loc} {
+proc transfer_editor_buffer_to_abcmatch {} {
+proc play_match.abc {} {
+proc dump_to_abc {} {
+
+
+# Part 17.0              Grouper interface
+proc grouper_window {} {
+proc pop_grouper_results {} {
+proc grouper_title_index {abcfile} {
+proc list_titles {n} {
+proc start_grouper {} {
+proc stop_grouper {} {
+proc create_matcher_template_for {grouper_handle seqno} {
+proc group_tunes {n abcfile} {
+proc grouper_findbars_for {seqno} {
+proc run_grouper {} {
+proc dump_grouper_output {} {
+
+
+# Part 18.0                  Diagnostic Support Functions
+proc runabc_diagnostic {} {
+editor or word processor."
+proc check_file {execname} {
+proc show_checkversion_summary {} {
+
+
+# Part 19.0           Abc Editor Filter functions
+proc remove_voice_fields {buffer dummy} {
+proc remove_backslashes {buffer dummy} {
+proc remove_tab_chars {buffer dummy} {
+proc interp_M_field {line} {
+proc interp_L_field {line} {
+proc compute_bar_rest {Lfield Mfield} {
+proc multi_rests_nz2Z {line dummy} {
+proc whole_rest_from_region {start end} {
+proc update_rest_duration {line} {
+proc multi_rests_Z2nz {region dummy} {
+proc remove_blank_lines {blanks} {
+proc edit_condense_whole_rests  {region type} {
+proc condense_whole_rest {buffer type} {
+proc condense_line {line type} {
+proc extract_action {action} {
+proc bar_align {} {
+proc music_indent {lines} {
+proc indent_music {lines numchar} {
+proc add_num_to_list {num numlist} {
+proc next_bar_pos {lines} {
+proc align_next_bar {lines bar_align_pos} {
+proc remove_next_bar {lines} {
+proc bar_squeeze {} {
+
+
+# Part 21.0           Console Page Support Functions
+proc update_console_page {} {
+proc show_console_page {text wrapmode} {
+proc highlight_line {line1 line2} {
+proc highlight_xtmp_line {line} {
+
+
+# Part 22.0           Midi2abc interface
+proc midi2abc_defaults {} {
+proc disable_playabc {} {
+proc anacrusis_cmd {sel} {
+proc unit_cmd {sel} {
+proc keysig_cmd {sel} {
+proc keysig_select {sel} {
+proc timesig_cmd {sel} {
+proc channel_cmd {sel} {
+proc show_midi2abc_settings {} {
+proc show_midi2abc_page {} {
+proc unit_input {} {
+proc anacrusis_input {} {
+proc timesig_input {} {
+proc keysig_input {} {
+proc channel_input {} {
+proc fileeq {pathmidi pathopen} {
+proc powerof2 {num max} {
+proc check_midi2abc_options {filein} {
+proc save_browser {} {
+proc midi_file_browser {} {
+proc midi2abc {} {
+proc play_midi_file {name} {
+proc play_original_midi {} {
+proc play_generated_abc {} {
+
+
+# Part 23.0         Voice Support Functions for midi2abc
+proc extract_all_voices {tunes abcfile} {
+proc getnonblank_bar {id} {
+proc interleave_voices {} {
+proc abc_voice_interleave {} {
+
+
+# Part 24.0  Chord substitution functions for Abc Editor
+proc replace_chord {buffer level} {
+proc notesubstitute {note} {
+proc replace_chord_x {buffer level} {
+proc split_chord {string} {
+proc pick_chord_note {notelist notenumber} {
+proc note2pitch {note} {
+
+
+# Part 25.0           Midishow
+proc check_midi2abc_and_midicopy_versions {} {
+proc piano_window {} {
+proc ppqn_adjustment_window {} {
+proc piano_Button1Press {x y} {
+proc piano_Button1Motion {x} {
+proc piano_Button1Release {} {
+proc piano_ClearMark {} {
+proc BindXview {lists args} {
+proc BindYview {args} {
+proc unpack_mthd_header {} {
+proc read_midifile_header {openfile} {
+proc show_events {} {
+proc piano_zoom {} {
+proc piano_unzoom {factor} {
+proc piano_total_unzoom {} {
+proc compute_pianoroll {} {
+proc piano_qnotelines {} {
+proc qnote_spacing_adjustment {ppqn_incr} {
+proc qnote_offset_adjustment {offset} {
+proc put_trkchan_selector {} {
+proc piano_horizontal_scroll {val} {
+proc bind_tracks {} {
+proc highlight_track {num x y} {
+proc unhighlight_track {num} {
+proc midi_to_key {midipitch} {
+proc update_piano_txt {x y} {
+proc midi_limits {} {
+proc count_selected_midi_tracks {} {
+proc midi_to_midi {sel} {
+proc startup_playmark_motion {miditime} {
+proc move_playmark {} {
+proc stop_playmarker {} {
+proc piano_play_midi_extract {} {
+proc create_midi_file {} {
+proc create_abc_file {} {
+proc create_abc_file_and_display {} {
+proc create_abc_file_and_play {} {
+proc create_abc_and_midi {} {
+
+
+# Part 26.0        Midi Statistics for Midishow
+proc pianoroll_statistics {choice} {
+proc plotmidi_velocity_or_pitch_distribution {type} {
+proc show_note_distribution {} {
+
+
+# Part 27.0      Graphics Namespace
+proc set_xmapping {left right xleft xright} {
+proc set_ymapping {bottom top ybot ytop} {
+proc save_transform { } {
+proc restore_transform {xfm} {
+proc alter_transformation {left right bottom top xleft xright ybot ytop} {
+proc ixpos xval {
+proc iypos yval {
+proc pix_to_x ix {
+proc pix_to_y iy {
+proc draw_x_ticks {can xstart xend xstep nskip labindex fmt} {
+proc draw_y_ticks {can ystart yend ystep nskip fmt} {
+proc draw_x_log10ticks {can  start end fmt} {
+proc draw_graph_from_arrays {can xvals yvals npoints} {
+proc draw_graph_from_list {can datalist} {
+proc draw_impulses_from_list {can datalist} {
+proc plot_velocity_map {} {
+
+
+# Part 28.0             File type registration
+proc RegisterFileType { extension className textName script args } {
+proc associate_abc {} {
+
+
+# Part 29.0         Mftext interface
+proc mftextwindow {} {
+proc output_mftext {} {
+proc tag_and_insert_mftext_line {line} {
+proc elide_reveal_track no {
+proc mfnotescmd {} {
+proc mftouchcmd {} {
+proc mfprogcmd {} {
+proc mfmetacmd {} {
+proc mfcntlcmd {} {
+
+
+# Part 30.0             Incipits file support functions
+proc copy_tunes {abchandle nbars outhandle noX} {
+proc show_incipits_page {} {
+proc incipits_to_TclAbcEditor {} {
+proc incipits_to_file {} {
+proc play_entire_edit_window {verbatim} {
+
+
+# Part 31.0            Beat Graph and Unique Chords for Midishow
+proc beat_graph {} {
+proc list_unique_chords_window {} {
+proc compare_onset {a b} {
+proc midi_to_key {midipitch} {
+proc midi_to_pitchclass {midipitch} {
+proc label_notelist {notelist} {
+proc label_pitchlist {pitchlist} {
+proc count_chords {chord} {
+proc chord_instants {chord instant} {
+proc print_chordcount_by_size {} {
+proc print_chordcount_by_key {w} {
+proc print_chordinstants {} {
+proc reorganize_midicmd {} {
+proc turn_off_all_notes {} {
+proc turn_off_all_pitches {} {
+proc list_on_notes {maxlength} {
+proc list_on_pitches {} {
+proc switch_note_status {midicmd} {
+proc set_pitch_status {} {
+proc make_and_display_chords {pitchclass} {
+proc unique_chords {} {
+proc display_entire_edit_window {} {
+proc piano_window_ps_output {} {
+
+
+# Part 32.0         Solfege vocalization for abc editor
+proc solfege_vocalization {} {
+proc vocalize_all_notes {buffer tonic} {
+proc vocalize_note {note tonic} {
+proc key2number {keysig} {
+
+
+# Part 33.0        Drum Editor
+proc drumtool_gui_setup {} {
+proc dBindYview {args} {
+proc flipcolor {tagid} {
+proc clear_all {} {
+proc setup_drum_grid {} {
+proc setup_drum_key {} {
+proc play_patch {no} {
+proc init_drum_hits {} {
+proc create_abc_drum_rep {} {
+proc reduce {fraction} {
+proc evalmath {mathexp} {
+proc compress_rests {drumbar} {
+proc cleanup_extraneous_ones {bar} {
+proc play_drum_pattern {bar times} {
+proc play_bar {times} {
+proc convert_drumhits_to_list {} {
+proc replace_edited_tune {} {
+proc paste_abcedit_text {outhandle} {
