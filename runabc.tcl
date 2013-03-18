@@ -33,8 +33,8 @@ exec wish8.5 "$0" "$@"
 #      http://ifdo.pugmarks.com/~seymour/runabc/top.html
 
 
-set runabc_version 1.751
-set runabc_date "(September 04  2012 08:35)"
+set runabc_version 1.779
+set runabc_date "(March 16 2013 20:10)"
 set tcl_version [info tclversion]
 set startload [clock clicks -milliseconds]
 #lappend auto_path /usr/share/tcltk/tk8.5
@@ -458,6 +458,7 @@ proc ::tooltip::enableCanvas {w args} {
 wm protocol . WM_DELETE_WINDOW {confirm_save; write_runabc_ini; exit}
 wm resizable . 1 1
 global df
+global ps_numb_start # used by display_section
 global abc_file_mod
 set abc_file_mod 0; # flag indicate that file midi(abc_open) was changed
 
@@ -559,13 +560,19 @@ proc check_integrity {} {
                     download from http://ifdo.ca/~seymour/runabc/top.html.\n"
         }
         set result [check_file path_gs]
+        set xmsg "\nYou can still use runabc to display (print) the music, but you will be restricted to using abcm2ps and xhtml format.\n"
         if {[string first "not found" $result] >= 0} {
+            set prtmsg 1
             append msg "\n$midi(path_gs) was not found\n"
             append msg "\n$midi(path_gs) is a PostScript file viewer. You can get \
                     the install package from http://blog.kowalczyk.info/software/sumatrapdf/free-pdf-reader.html\n"}
         if {[file exist "c:/Program Files/gs/"] != 1} {
+            set prtmsg 1
             append msg " You will also need Ghostview which you can get from http://www.cs.wisc.edu/~ghost/index.htm\n\
                     This should create a folder gs in your c:/program files/ directory."
+        }
+        if {$prtmsg} {append msg $xmsg
+            set midi(m2ps_output)  "xhtml"
         }
     } else {
         set msg "You are running runabc.tcl under the Unix operating system.\n"
@@ -698,7 +705,6 @@ proc midi_init {} {
     set midi(transfer_prot_1) 0
     set midi(transfer_prot_2) 0
     set midi(no_clipboard) 1
-    set midi(summary_enabled) 1
     set midi(bell_on) 1
     set midi(buttonlabels) 0
     set midi(noconfirmsave) 0
@@ -750,6 +756,7 @@ proc midi_init {} {
     set midi(ps_staffsep) 50
     set midi(ps_c) 0
     set midi(ps_fmt_flag) 0
+    set midi(ps_fmt_landscape) 0
     set midi(ps_fmt_file) letter.fmt
     set midi(ps_maxvent) 4
     set midi(ps_maxsent) 800
@@ -764,6 +771,7 @@ proc midi_init {} {
     set midi(ps_noslur) 0
     set midi(ps_other_options) ""
     
+    set midi(m2ps_output) ps
     
     # yaps default parameters
     set midi(papersize) 0
@@ -884,6 +892,7 @@ proc midi_init {} {
     
     #  g2v
     set midi(g2v_clipboard) 0
+    set midi(mode_guess) mse
     
     set midi(donotshow) 0
 }
@@ -1256,6 +1265,7 @@ $w.type add command -label "gchords/drums to voice" -command g2v_startup -font $
 $w.type add command -label "reformat"   -command show_reformat_page -font $df
 $w.type add command -label "extract part"   -command show_extract_page -font $df
 $w.type add command -label "drum tool"    -command {drumtool_gui_setup} -font $df
+$w.type add command -label "pitch histogram" -command {note_histogram} -font $df
 $w.type add command -label "view X.tmp"     -command show_tmpfile -font $df
 $w.type add command -label "save X.tmp as an abc file" -command save_tmpfile -font $df
 $w.type add command -label "save midi file(s)" -command midisave -font $df
@@ -1266,15 +1276,27 @@ $w.type.copy add command -label "copy" -font $df \
         -command {start_copy_selected_files w 0}
 $w.type.copy add command -label "copy and renumber" -font $df \
         -command {start_copy_selected_files w 1}
+$w.type.copy add command -label "copy all" -font $df \
+        -command copy_all_and_renumber
 $w.type.copy add command -label "append" -font $df \
         -command {start_copy_selected_files a 0}
 $w.type.copy add command -label "append and renumber" -font $df \
         -command {start_copy_selected_files a 1}
+$w.type.copy add command -label "merge abc files" -font $df \
+        -command {merge_abc_files}
+$w.type.copy add command -label "split abc file" -command split_abc_file  -font $df
 $w.type.copy add command -label "combine parts" -font $df \
         -command {combine_parts}
-$w.type.copy add command -label "separate tunes" -command split_abc_file  -font $df
 $w.type.copy add command -label help -font $df \
         -command {show_message_page $hlp_copy word}
+
+tooltip::tooltip $w.type.copy -index 0  "copy selected tunes to an abc file"
+tooltip::tooltip $w.type.copy -index 1  "copy selected tunes to an abc file\n and renumber X reference numbers"
+tooltip::tooltip $w.type.copy -index 2  "append selected tunes to an abc file"
+tooltip::tooltip $w.type.copy -index 3  "append selected tunes to an abc file\n and renumber X reference numbers"
+tooltip::tooltip $w.type.copy -index 4  "merge all abc files in a folder\nto a single file and save"
+tooltip::tooltip $w.type.copy -index 5  "split a multi-tune abc file into separate files\ncontaining one tune each and save in a folder"
+tooltip::tooltip $w.type.copy -index 6  "click help button below"
 
 button .abc.functions.console -text console -image exec-22 -command {show_console_page $exec_out char} -borderwidth 2 -font $df
 menubutton .abc.functions.search -text search -image find-22 -relief raised -menu .abc.functions.search.type -font $df
@@ -1442,17 +1464,18 @@ pack .abc.titles.t  -expand y -fill both
 pack .abc           -expand y -fill both
 focus .abc.titles.t
 
+global ps_numb_start
 menu .actionmenu
 .actionmenu add command -label play -command {play_action}
-.actionmenu add command -label display -command {display_action}
-.actionmenu add command -label summary -command {show_summary $i}
+.actionmenu add command -label display -command {set ps_numb_start 0
+    display_action}
+.actionmenu add command -label summary -command {Refactor::header_window}
 
 
 bind .abc.titles.t <Button-3> {
     .abc.titles.t selection set {}
     .abc.titles.t selection set [.abc.titles.t identify row %x %y]
     set i [.abc.titles.t selection]
-    #show_summary $i
     tk_popup .actionmenu %X %Y
 }
 
@@ -1624,9 +1647,11 @@ proc display_action {} {
     global console_clock
     global active_sheet
     global exec_out
+    global ps_numb_start
     set console_clock [clock seconds]
     set sel [title_selected]
     copy_selected_files $sel w 0 [list $midi(midi_dir)/X.tmp]
+    set ps_numb_start 0
     display_tunes [list $midi(midi_dir)/X.tmp]
     update_console_page
 }
@@ -1636,6 +1661,8 @@ proc display_action {} {
 proc display_tunes {abcfile} {
     global midi
     global yaps_ptsize exec_out
+    global ps_numb_start
+    
     if {$midi(ps_creator) == "yaps"} {
         # YAPS
         set M $midi(yaps_lmargin)x$midi(yaps_tmargin)
@@ -1654,8 +1681,7 @@ proc display_tunes {abcfile} {
         set cmd "exec [list $midi(path_otherps)] [list $abcfile] $midi(otherps)"
         catch {eval $cmd} exec_out
         
-    } else {
-        # abc2ps and abcm2ps
+    } elseif  {$midi(ps_creator) == "abc2ps"} {
         set abc2psopt ""
         switch -- $midi(ps_fmt_flag) {
             0  {append abc2psopt " -s $midi(ps_scale) \
@@ -1665,7 +1691,6 @@ proc display_tunes {abcfile} {
             1  {append abc2psopt " -p"}
             2  {append abc2psopt " -P"}
             3  {append abc2psopt " -F [list $midi(ps_fmt_file)]"}
-            4  {append abc2psopt " -l "}
         }
         
         if {$midi(ps_c)}     {append abc2psopt " -c"}
@@ -1674,41 +1699,76 @@ proc display_tunes {abcfile} {
         if {$midi(ps_bbar)}  {append abc2psopt " -k 1"}
         if {$midi(ps_bnumb)} {append abc2psopt " -N"}
         if {$midi(ps_bppage)} {append abc2psopt " -1"}
-        if {$midi(ps_creator) == "abc2ps"} {
-            set abc2psopt [concat $abc2psopt " -g $midi(ps_glue)"]
-            if {[string length $midi(ps_maxvent)] > 0} {
-                set abc2psopt [concat $abc2psopt -maxv $midi(ps_maxvent)]}
-            if {[string length $midi(ps_maxsent)] > 0} {
-                set abc2psopt [concat $abc2psopt -maxs $midi(ps_maxsent)]}
-            if {$midi(bpsvoice)} {append $abc2psopt " -V $midi(psvoice)"}
-        }
-        if {$midi(ps_creator) == "abcm2ps"} {
-            if {$midi(ps_nolyric)} {
-                set abc2psopt [concat $abc2psopt -M]}
-            if {$midi(ps_noslur)} {
-                set abc2psopt [concat $abc2psopt -G]}
-        }
+        if {$midi(ps_fmt_landscape)} {append abc2psopt " -l"}
+        set abc2psopt [concat $abc2psopt " -g $midi(ps_glue)"]
+        if {[string length $midi(ps_maxvent)] > 0} {
+            set abc2psopt [concat $abc2psopt -maxv $midi(ps_maxvent)]}
+        if {[string length $midi(ps_maxsent)] > 0} {
+            set abc2psopt [concat $abc2psopt -maxs $midi(ps_maxsent)]}
+        if {$midi(bpsvoice)} {append $abc2psopt " -V $midi(psvoice)"}
         
-        if {$midi(ps_creator) == "abcm2ps" \
-                    && [string length $midi(ps_other_options)] > 1} {
+        set cmd "exec [list $midi(path_abc2ps)] \
+                [list $abcfile] $abc2psopt -o"
+        catch {eval $cmd} exec_out
+        set exec_out "$cmd\n\n$exec_out"
+        
+        
+        
+    } elseif {$midi(ps_creator) == "abcm2ps"} {
+        set abc2psopt ""
+        switch -- $midi(ps_fmt_flag) {
+            0  {append abc2psopt " -s $midi(ps_scale) \
+                        -a $midi(ps_shrink) -m $midi(ps_lmargin) \
+                        -w $midi(ps_width)  \
+                        -d $midi(ps_staffsep)"}
+            1  {append abc2psopt " -p"}
+            2  {append abc2psopt " -P"}
+            3  {append abc2psopt " -F [list $midi(ps_fmt_file)]"}
+        }
+        if {$midi(ps_bxref)} {append abc2psopt " -x"}
+        if {$midi(ps_bppage)} {append abc2psopt " -1"}
+        if {$midi(ps_bbar)}  {append abc2psopt " -j 1"}
+        if {$ps_numb_start != 0} {append abc2psopt " -b $ps_numb_start"}
+        if {$midi(ps_c)}     {append abc2psopt " -c"}
+        if {$midi(ps_fmt_landscape)} {append abc2psopt " -l"}
+        if {$midi(ps_nolyric)} {
+            set abc2psopt [concat $abc2psopt -M]}
+        if {$midi(ps_noslur)} {
+            set abc2psopt [concat $abc2psopt -G]}
+        if {$midi(m2ps_output) == "svg"} {
+            set abc2psopt [concat $abc2psopt -g]}
+        if {$midi(m2ps_output) == "xhtml"} {
+            set abc2psopt [concat $abc2psopt -X]}
+        if { [string length $midi(ps_other_options)] > 1} {
             set abc2psopt [concat $abc2psopt $midi(ps_other_options)]}
         
-        if {$midi(ps_creator) == "abcm2ps"} {
-            set cmd "exec [list $midi(path_abcm2ps)] \
-                    [list $abcfile] $abc2psopt"} else {
-            set cmd "exec [list $midi(path_abc2ps)] \
-                    [list $abcfile] $abc2psopt -o"}
+        set cmd "exec [list $midi(path_abcm2ps)] \
+                [list $abcfile] $abc2psopt"
         
         catch {eval $cmd} exec_out
+        set exec_out "$cmd\n\n$exec_out"
     }
-    set exec_out "$cmd\n\n$exec_out"
-    set cmd "exec [list $midi(path_gs)] Out.ps &"
+    
+    
+    if {$midi(ps_creator) == "abcm2ps"} {
+        if {$midi(m2ps_output) == "svg" } {
+            set cmd "exec [list $midi(path_internet)] [list [pwd]/Out001.svg] &"
+        } elseif {$midi(m2ps_output) == "xhtml"} {
+            set cmd "exec [list $midi(path_internet)] [list [pwd]/Out.xhtml] &"
+        } else {
+            set cmd "exec [list $midi(path_gs)] Out.ps &"
+        }
+    } else {
+        set cmd "exec [list $midi(path_gs)] Out.ps &"
+    }
     set exec_out "$exec_out\n\n$cmd"
     eval $cmd
 }
 
 proc display_tunes_thru_x_tmp {abcfile} {
     global midi console_clock
+    global ps_numb_start
+    set ps_numb_start 0
     file copy -force $abcfile  $midi(midi_dir)/X.tmp
     set console_clock [clock seconds]
     display_tunes [list $midi(midi_dir)/X.tmp]
@@ -1903,9 +1963,15 @@ proc title_index {abcfile} {
     global item_id
     global index_done
     global df
+    if {[info exist itemposition]} {unset itemposition}
+    if {$abc_file_mod} {
+        set lastindex [.abc.titles.t selection]
+        set itemposition [.abc.titles.t index $lastindex]
+        #puts "index for $lastindex = $itemposition"
+    }
+    set abc_file_mod 0
     if {[info exist first_title_item]} {unset first_title_item}
     #    puts "title_index [info level 0]"
-    set abc_file_mod 0
     #    puts "title_index abc_file_mod reset"
     set srch X
     set pat {[0-9]+}
@@ -1945,6 +2011,7 @@ proc title_index {abcfile} {
                     set outline [format "%4s  %-5s %s %s" $number [list $keysig] $meter [list $name]]
                     set toc_index [.abc.titles.t insert {}  end -values $outline -tag tune]
                     set item_id($i) $toc_index
+                    #puts "$i $toc_index"
                     set fileseek($toc_index) $filepos
                     if {![info exist first_title_item]} {
                         .abc.titles.t focus $toc_index
@@ -1963,7 +2030,7 @@ proc title_index {abcfile} {
     }
     close $titlehandle
     if {$i == 0} {show_error_message "corrupted file $midi(abc_open)\nno K:,X:,T: found in file."
-                  return}
+        return}
     if {$i < 15} {
         .abc.titles.t configure -height [expr $i + 1]
         set midi(abc_save) $midi(abc_open)
@@ -1971,7 +2038,12 @@ proc title_index {abcfile} {
         .abc.titles.t configure -height 15
         set midi(abc_save) edit.abc
     }
-    .abc.titles.t see $first_title_item
+    #puts "item id for $itemposition = $item_id($itemposition)"
+    if {[info exist itemposition]} {
+        .abc.titles.t selection set $item_id($itemposition)
+        .abc.titles.t see $item_id($itemposition)
+    }
+    extract_tune_info
     update
 }
 
@@ -2486,6 +2558,76 @@ proc edit_empty_file {} {
 }
 
 
+proc merge_abc_files {} {
+    global midi exec_out
+    set folder [tk_chooseDirectory]
+    if {[llength $folder] < 1} return
+    puts $folder
+    
+    set collection [glob -directory $folder *.abc *.ABC]
+    set exec_out  "[llength $collection] files were found"
+    show_console_page $exec_out char
+    set types {{{abc files} {*.abc}}
+        {{all} {*}}}
+    set filedir [file dirname $midi(abc_default_file)]
+    set filename [tk_getSaveFile -initialdir $filedir \
+            -filetypes $types]
+    if {[string length $filename] == 0} return
+    set outhandle [open $filename  w]
+    foreach abcfile $collection {
+        set inputhandle [open $abcfile r]
+        while {[gets $inputhandle line] >= 0} {
+            puts $outhandle $line}
+        puts $outhandle \n
+        close $inputhandle
+    }
+    close $outhandle
+    puts "saved in $filename"
+    set exec_out "$exec_out\n[llength $collection] files were merged into $filename"
+    show_console_page $exec_out char
+}
+
+
+proc copy_all_and_renumber {} {
+global midi
+
+set types {{{abc files} {*.abc}}
+        {{all} {*}}}
+renumber_message 
+set fileout [tk_getSaveFile -filetypes $types]
+puts $fileout
+if {[string length $fileout] == 0} return
+if {[string compare  $midi(abc_open) $fileout] == 0} {
+        tk_messageBox -message "do not even think of writing over the input file" \
+                -type ok
+        return
+        }
+set msg "The program will copy the entire file $midi(abc_open) including all \
+text and renumber the X reference numbers starting from $midi(startnumber):\
+and store the results in the file $fileout"
+set choice [tk_messageBox -type yesno -default yes \
+                -message $msg -icon question]
+if {$choice != "yes"} return
+
+set inhandle [open $midi(abc_open) r]
+
+set outhandle [open $fileout  w]
+set n 1
+
+while {[gets $inhandle line] >= 0} {
+      if {[eof $inhandle]} break
+      if {[string range $line 0 1] == "X:"} {
+        puts $outhandle "X: $n"
+        incr n} else {
+        puts $outhandle $line}
+       }
+      close $inhandle
+      close $outhandle
+      puts "saved results in $fileout\n"
+}
+
+
+
 proc start_copy_selected_files {access renumber} {
     global midi
     set sel [title_selected]
@@ -2501,21 +2643,32 @@ proc start_copy_selected_files {access renumber} {
                 -type ok
         return
     }
-    copy_selected_files $sel $access $renumber $filename
+   if {$renumber} renumber_message
+   set ntunes [llength $sel]
+   switch $access {
+        "w"	{set msg "The program will copy $ntunes tunes to the file $filename"}
+        "a"	{set msg "The program will append $ntunes tunes to the file $filename"}
+    }
+    if {$renumber} {set msg "$msg\nThe program will renumber the x ref of the tunes sequentially starting from $midi(startnumber)"}
+   set choice [tk_messageBox -type yesno -default yes \
+                -message $msg -icon question]
+    #copy_message $sel $access $renumber $filename
+    if {$choice == "yes"} {copy_selected_files $sel $access $renumber $filename}
 }
 
-proc copy_message {} {
+proc renumber_message {} {
+    global df
+    global midi
     set w .abc.copy
     toplevel $w
     focus $w
-    message $w.msg -text "The program will renumber the x ref sequentially \
-            starting from" -width 200
-    frame $w.fr
-    entry $w.fr.ent -width 5 -textvariable midi(startnumber)
-    button $w.fr.ok -text ok -command {destroy .abc.copy}
+    set msg "The program will renumber the x ref of the tunes sequentially starting from "
+    message $w.msg -text $msg -width 300 -font $df
+    button $w.continue -text continue -command {destroy .abc.copy} -font $df
     pack $w.msg -side top
-    pack $w.fr.ent $w.fr.ok -side left
-    pack $w.fr
+    entry $w.ent -width 5 -textvariable midi(startnumber)
+    pack $w.ent -side left
+    pack $w.continue
     grab $w
     tkwait window $w
 }
@@ -2524,7 +2677,6 @@ proc copy_message {} {
 proc copy_selected_files {sel access renumber filename} {
     #copies or appends all selected tunes to an output file
     global fileseek midi exec_out
-    if {$renumber} copy_message
     set edithandle [open $midi(abc_open) r]
     set outhandle [open $filename $access]
     set n $midi(startnumber)
@@ -2746,8 +2898,8 @@ set hlp_editor \
 <Alt d> display
 
 If you right click the mouse in the edit window, a small pop-up menu\
-allows you to display or play the edited tune. If part of the tune,\
-is highlighted, the play function will play just the highlighted portion.
+        allows you to display or play the edited tune. If part of the tune,\
+        is highlighted, the play function will play just the highlighted portion.
 
 There are many more bindings... see Tcl documentation for text widget.
 
@@ -2755,16 +2907,28 @@ On Windows you can use <cntl-c>, <cntl-x> <cntl-v> to copy, cut and \
         paste the selections. For other systems use <cntl-y> instead of <cntl-v>. \
         On some unix systems use <Cntl _> for undo."
 
-set hlp_copy "The copy function\n\n The function will copy the\
+set hlp_copy "Copy to file menu\n\nThe function 'copy' will copy the\
         selected tunes in the table of contents to a designated abc\
         file. If the file does not already exist, it will create\
         a new file; otherwise, it will destroy the existing file\
         and overwrite it with the selected tunes. The X: numbers will be\
-        preserved.\n\nCopy and renumber will do the same as above but it will\
+        preserved.\n\n'Copy and renumber' will do the same as above but it will\
         renumber the selected tunes increasing sequentially from a selected\
-        number.\n\n Append will append the selected tunes to an existing file,\
-        preserving the original numbering.\n\nAppend and renumber will do the\
-        same but renumber the selected tunes.\n\nThe copy combine parts function is\
+        number.\n\n\'Copy all' will copy the entire open file to a specified\
+	file including any intervening text but it will renumber the\
+	X: reference numbers starting from a selected number.\n\n\
+	'Append' will append the selected tunes to an existing file,\
+        preserving the original numbering.\n\n'Append and renumber' will do the\
+        same but renumber the selected tunes.\
+        \n\n'Merge abc files' combines all the abc files in\
+        a folder and saves it to a separate file.\
+        \n\n'Split abc file' splits a multitune\
+        abc file into separate files each containing one tune and puts the files\
+        into a directory with the same name as the input file (without the abc\
+        extension). You should select all the tunes that you want to extract\
+        in the TOC before using this function. To select all tunes below the
+selected tune hold the shift button while clicking on that tune.
+        \n\n'Combine parts' function is\
         specificly designed to reformat Laura Conrads renaissance music in\
         her allparts.abc files. Each part is written as a separate tune rather\
         than a separate voice. Therefore it is not possible to create a midi\
@@ -2774,12 +2938,7 @@ set hlp_copy "The copy function\n\n The function will copy the\
         first select (highlight) all the tunes that you wish to combine. Like other\
         copy functions, you will prompted for the name of an output file.\n\n\
         Caution: do not try to copy over the source file already displayed in\
-        the table of contents.\n\nThe function 'separate tunes' splits a multitune\
-        abc file into separate files each containing one tune and puts the files\
-        into a directory with the same name as the input file (without the abc\
-        extension). You should select all the tunes that you want to extract\
-        in the TOC before using this function. To select all tunes below the
-selected tune hold the shift button while clicking on that tune."
+        the table of contents."
 
 
 
@@ -2814,10 +2973,10 @@ proc startup_tcl_abc_edit {opt} {
     file mkdir "[pwd]/$midi(abc_work_folder)"
     file rename -force $midi(abc_default_file) $outfile
     if {$opt} {
-      tcl_abc_edit $outfile $opt
-      } else {
-      tcl_abc_edit_with_voices $outfile $opt
-      }      
+        tcl_abc_edit $outfile $opt
+    } else {
+        tcl_abc_edit_with_voices $outfile $opt
+    }
     if {[llength $selected_tunes] > 1} {
         .abcedit.func.file.actions entryconfigure 3 -state disable}
 }
@@ -2889,15 +3048,15 @@ proc tcl_abc_edit {abcfile toolbox} {
     guitar_chord
     grace_toolbox
     bind $abctxtw <KeyRelease> "tag_line"
-
-  bind $abctxtw <Button-3> {
+    
+    bind $abctxtw <Button-3> {
         tk_popup .actionmenu2 %X %Y}
-
+    
     if {[winfo exist .actionmenu2] != 1} {
-       menu .actionmenu2
-       .actionmenu2 add command -label play -command {edit_play_context}
-       .actionmenu2 add command -label display -command {display_entire_edit_window}
-      }
+        menu .actionmenu2
+        .actionmenu2 add command -label play -command {edit_play_context}
+        .actionmenu2 add command -label display -command {display_entire_edit_window}
+    }
 }
 
 proc tcl_abc_edit_with_voices {abcfile toolbox} {
@@ -2925,7 +3084,7 @@ proc tcl_abc_edit_with_voices {abcfile toolbox} {
             -font "[list $midi(font_family_toc)] $midi(font_size) $midi(font_weight)"
     scrollbar .abcedit.pane.tframe.ysbar -orient vertical -command {$abctxtw yview}
     scrollbar .abcedit.pane.tframe.xsbar -orient horizontal -command {$abctxtw xview}
-
+    
     
     entry .abcedit.file  -textvariable midi(abc_save) -width 60 -font $df
     
@@ -2936,7 +3095,7 @@ proc tcl_abc_edit_with_voices {abcfile toolbox} {
     pack .abcedit.pane.tframe.ysbar -side right -fill y
     pack .abcedit.pane.tframe.xsbar -side bottom -fill x
     pack $abctxtw -fill both -expand 1 -side right
-
+    
     
     
     if {[file exist $abcfile]} {
@@ -2970,25 +3129,25 @@ proc tcl_abc_edit_with_voices {abcfile toolbox} {
         pack .abcedit.pane.tframe -expand 1 -fill both}
     
     bind $abctxtw <KeyRelease> "tag_line"
-
-  bind $abctxtw <Button-3> {
+    
+    bind $abctxtw <Button-3> {
         tk_popup .actionmenu2 %X %Y}
-
+    
     if {[winfo exist .actionmenu2] != 1} {
-       menu .actionmenu2
-       .actionmenu2 add command -label play -command {edit_play_context}
-       .actionmenu2 add command -label display -command {display_entire_edit_window}
-      }
+        menu .actionmenu2
+        .actionmenu2 add command -label play -command {edit_play_context}
+        .actionmenu2 add command -label display -command {display_entire_edit_window}
+    }
 }
 
 proc edit_play_context {} {
- global abctxtw
- set point [$abctxtw index insert]
- set selrange [$abctxtw tag ranges sel]
- if {[llength $selrange] < 2} {
-       play_entire_edit_window 0} else {
-       play_from_edit_window sel
-       }
+    global abctxtw
+    set point [$abctxtw index insert]
+    set selrange [$abctxtw tag ranges sel]
+    if {[llength $selrange] < 2} {
+        play_entire_edit_window 0} else {
+        play_from_edit_window sel
+    }
 }
 
 
@@ -3186,6 +3345,7 @@ proc tcl_abc_edit_menu_bar {abcfile} {
     
     button $w.display -text "display" -font $df -relief flat -command \
             display_entire_edit_window
+    
     bind .abcedit <Alt-d> display_entire_edit_window
     
     button $w.help  -text help -font $df -relief flat
@@ -3213,7 +3373,7 @@ proc tcl_abc_edit_menu_bar {abcfile} {
     #    bind .abcedit <Alt-Key-Left> {expand_contract_note 0}
 }
 
-# Part 10.1           Bar Picker 
+# Part 10.1           Bar Picker
 
 namespace eval Barpicker {
     
@@ -3226,8 +3386,8 @@ namespace eval Barpicker {
             voicelist_buttons
             barpicker_buttons
             barselector_control
-           return
-           }
+            return
+        }
         frame $w
         pack $w
         #toplevel $w
@@ -3241,13 +3401,13 @@ namespace eval Barpicker {
         pack $w.piece -fill x -expand true
         make_pattern_button_set
         barselector_interface
-        clear_pattern_buttons 
+        clear_pattern_buttons
         if {$alreadyloaded} {
             voicelist_buttons
             barpicker_buttons
             barselector_control
         }
-    tooltip::tooltip $w.piece.update  "Paste the contents of entry box into the highlighted\n bar and update the internal representation."
+        tooltip::tooltip $w.piece.update  "Paste the contents of entry box into the highlighted\n bar and update the internal representation."
     }
     
     
@@ -3299,7 +3459,7 @@ namespace eval Barpicker {
         frame $w -borderwidth 3 -relief sunken
         pack $w -fill x
         frame $w.c
-        pack $w.c -side left -fill both -anchor nw 
+        pack $w.c -side left -fill both -anchor nw
         set nbars_exposed 0
     }
     
@@ -3356,19 +3516,19 @@ namespace eval Barpicker {
         }
         set npat 0
     }
-
-   proc import_drumpatterns {} {
+    
+    proc import_drumpatterns {} {
         global npat last_drumpattern
         global pattern drumpatterns
         set npat last_drumpattern
         for {set i 0}  {$i <$last_drumpattern} {incr i} {
-         set pattern($i) "$drumpatterns(D$i) |"
-        .abcedit.pane.picker.patterns.$i configure -state normal 
-        .abcedit.pane.picker.patterns.$i configure -state normal -command "Barpicker::putpattern $i"
-        tooltip::tooltip .abcedit.pane.picker.patterns.$i $pattern($i)
-         }
-    } 
-
+            set pattern($i) "$drumpatterns(D$i) |"
+            .abcedit.pane.picker.patterns.$i configure -state normal
+            .abcedit.pane.picker.patterns.$i configure -state normal -command "Barpicker::putpattern $i"
+            tooltip::tooltip .abcedit.pane.picker.patterns.$i $pattern($i)
+        }
+    }
+    
     set npat 0
     
     proc barselector_interface {} {
@@ -3380,9 +3540,9 @@ namespace eval Barpicker {
         frame $w
         pack $w -fill x -expand true
         button $w.resync -text resync -font $df -command {
-           Refactor::refactor_textcontents 
-           Barpicker::create_picker_interface
-           }
+            Refactor::refactor_textcontents
+            Barpicker::create_picker_interface
+        }
         button $w.play -text play -command play_section -font $df
         button $w.display -text display -command display_section -font $df
         button $w.save -text save -command Refactor::output_file_direct -font $df
@@ -3436,12 +3596,12 @@ namespace eval Barpicker {
         if {$tag_id == "head"} return
         set splitag [split $tag_id -]
         if {[lindex $splitag 0] != "x"} {
-          set clickedvoice [lindex $splitag 0]
-          set clickedbar [lindex $splitag 1]
-          set n [lsearch $voicelist $clickedvoice]
-          incr n
-          .abcedit.pane.picker.voicepicker.$n invoke
-          .abcedit.pane.picker.barpicker.c.$clickedbar invoke
+            set clickedvoice [lindex $splitag 0]
+            set clickedbar [lindex $splitag 1]
+            set n [lsearch $voicelist $clickedvoice]
+            incr n
+            .abcedit.pane.picker.voicepicker.$n invoke
+            .abcedit.pane.picker.barpicker.c.$clickedbar invoke
         }
     }
     
@@ -3539,17 +3699,17 @@ namespace eval Barpicker {
         #patterns in putpattern.
         set abarpiecelist [split $apiece \n]
         if {[llength $abarpiecelist] < 2} {
-          set abarpiece [lindex $abarpiecelist end]
-          set aoldloc1 [string first $abarpiece $apiece]
-          set aoldloc2 [expr $aoldloc1 + [string length $barpiece]]
-          set aoldbarpiece $apiece
-          #puts "aoldloc= $aoldloc1 $aoldloc2"
-          set barpiece $apiece
-          .abcedit.pane.picker.piece.update configure -state normal
-          } else {
-          set barpiece ""
-          .abcedit.pane.picker.piece.update configure -state disable
-          }
+            set abarpiece [lindex $abarpiecelist end]
+            set aoldloc1 [string first $abarpiece $apiece]
+            set aoldloc2 [expr $aoldloc1 + [string length $barpiece]]
+            set aoldbarpiece $apiece
+            #puts "aoldloc= $aoldloc1 $aoldloc2"
+            set barpiece $apiece
+            .abcedit.pane.picker.piece.update configure -state normal
+        } else {
+            set barpiece ""
+            .abcedit.pane.picker.piece.update configure -state disable
+        }
     }
     
     set npat 0
@@ -3634,7 +3794,7 @@ set hlp_barpicker "TclMultiVoice Editor\n\n\
         placed in the orange entry box.\n\n\
         All the contents of the p memory buttons can be cleared using the\
         'clear' button. The 'import' button works in conjuction with the\
-         'drum tool' which should be exposed before pressing that\
+        'drum tool' which should be exposed before pressing that\
         button. The import button will transfer the contents of the D\
         memory buttons to the p buttons. A plain bar marker like | will\
         be added. When repeat markings are needed, you will have to\
@@ -3646,8 +3806,8 @@ set hlp_barpicker "TclMultiVoice Editor\n\n\
         Finally, if you right click the mouse while the pointer is\
         anywhere in the text window, a small pop up menu will appear.\
         This saves you the effort of having to move the mouse button\
-        to one of the top menu buttons.      
-        "
+        to one of the top menu buttons.
+"
 
 
 
@@ -4149,7 +4309,7 @@ proc guitar_toolbox {keysig} {
     
     grid $gl.0 -sticky w
     for {set i 1} {$i < 7} {incr i} {
-        radiobutton $gl.$i -text $triadname($i)  -font $df\
+        radiobutton $gl.$i -text $triadname($i)  -font $df \
                 -command "insert_chord $triadname($i)" -value $i -variable chordno
         grid $gl.$i -sticky w
     }
@@ -4167,6 +4327,7 @@ proc guitar_toolbox {keysig} {
     grid $g.invert  -row 4 -column 2
     grid $g.prog    -row 5 -column 2
     possible_progression
+    highlight_primary_chords
 }
 
 
@@ -4194,6 +4355,42 @@ proc invertchord order {
                 -command "insert_chord $triadname($chordno)/$key"
     }
 }
+
+proc highlight_primary_chords {} {
+    global mode
+    set g .abcedit.pane.toolbox.guitartool.cframe
+    for {set i 1} {$i < 7} {incr i} {
+      $g.$i configure -fg grey32 
+      }
+    switch $mode {
+      0 -
+      5 { #major mode
+        $g.3 configure -fg black
+        $g.4 configure -fg black
+        }
+      1 -
+      2 -
+      3 { #minor
+        $g.3 configure -fg black
+        $g.6 configure -fg black}
+      4 {#locrian
+         $g.4 configure -fg black}
+      6 {#dorian
+         $g.1 configure -fg black
+         $g.3 configure -fg black}
+      7 {#phrygian
+         $g.1 configure -fg black
+         $g.6 configure -fg black}
+      8 {#lydian
+         $g.1 configure -fg black
+         $g.6 configure -fg black
+         }
+      9 {#mixolydian
+         $g.4 configure -fg black
+         $g.6 configure -fg black
+        }
+    }
+ }
 
 proc possible_progression {} {
     global triadname chordno
@@ -4225,19 +4422,19 @@ proc insert_chord {chord} {
     if {[info exists nextbar] == 0} {
         $abctxtw insert insert "\"$chord\" " guitar
         return}
-
+    
     if {$chordbegin == ""} {
         set lastinsert [$abctxtw index insert]
         $abctxtw insert insert "\"$chord\""  guitar
         $abctxtw mark set insert $lastinsert
         return}
-
+    
     if {$chordbegin && $nextnote && [$abctxtw compare $nextnote < $chordbegin]} {
         set lastinsert [$abctxtw index insert]
         $abctxtw insert insert "\"$chord\""  guitar
         $abctxtw mark set insert $lastinsert
         return}
-
+    
     set chordend [$abctxtw search \" "$chordbegin+1 char" $nextbar]
     #puts $chordend
     $abctxtw delete $chordbegin "$chordend +1 char"
@@ -4944,27 +5141,6 @@ proc make_summary_toplevel {} {
     pack $p.t -in $p -expand y -fill both
 }
 
-proc show_summary {i} {
-    global midi df fileseek
-    global abc_file_mod
-    set p .summary
-    if [winfo exist $p] {.summary.t delete 1.0 end} else make_summary_toplevel
-    if {$abc_file_mod}  {title_index $midi(abc_open)}
-    set loc $fileseek($i)
-    set abcfile $midi(abc_open)
-    set edithandle [open $abcfile r]
-    seek $edithandle $loc
-    set line [find_X_code $edithandle]
-    $p.t insert end "$line\n"
-    while {[string length $line] > 0 } {
-        set line  [get_nonblank_line $edithandle]
-        if {[string index $line 0] == "X"} break;
-        $p.t insert end "$line\n"
-        if {$midi(summary_enabled)<2 && [string index $line 0] == "K"} break;
-    }
-    close $edithandle
-}
-
 proc show_message_page {text wrapmode} {
     global active_sheet df
     #remove_old_sheet
@@ -5238,7 +5414,7 @@ proc show_extract_page {} {
 
 proc show_reformat_page {} {
     global active_sheet
-    global df 
+    global df
     remove_old_sheet
     if {$active_sheet == "reformat"} {
         set active_sheet "none"
@@ -5331,8 +5507,8 @@ radiobutton $w.ulayout -text "use layout file" \
         -variable midi(ps_fmt_flag) -value 3 -command show_my_style -font $df
 button $w.browselayout -text "browse layout file" -font $df\
         -command {setpath ps_fmt_file}
-radiobutton $w.landscape -text "landscape" \
-        -variable midi(ps_fmt_flag) -value 4 -command show_my_style -font $df
+checkbutton $w.landscape -text "landscape" -variable midi(ps_fmt_landscape)\
+        -font $df
 entry $w.layoutfile -width 24 -textvariable midi(ps_fmt_file) -font $df
 $w.layoutfile xview moveto 1.0
 
@@ -5342,12 +5518,15 @@ set glmenu [tk_optionMenu $w.gluemenu midi(ps_glue) shrink space stretch fill]
 $w.gluemenu configure -font $df
 $glmenu configure -font $df
 label $w.scalebut -text scale  -font $df
+tooltip::tooltip .abc.psform.scalebut  "increases or decreases the size of the font"
 entry $w.scaleent -width 10 -relief sunken -textvariable midi(ps_scale) -font $df
 label $w.widthbut -text width -font $df
+tooltip::tooltip .abc.psform.widthbut  "a page 8.5 inches across is about 600 points"
 entry $w.widthent -width 10 -relief sunken -textvariable midi(ps_width) -font $df
 label $w.lmargbut -text "left margin" -font $df
 entry $w.lmargent -width 10 -relief sunken -textvariable midi(ps_lmargin) -font $df
 label $w.shrinkbut -text shrinkage -font $df
+tooltip::tooltip .abc.psform.shrinkbut  "valid value between 0.0 and 1.0"
 entry $w.shrinkent -width 10 -relief sunken -textvariable midi(ps_shrink) -font $df
 label $w.staffseplab -text "staff separation" -font $df
 entry $w.staffsepent -width 10 -relief sunken -textvariable midi(ps_staffsep) -font $df
@@ -5385,14 +5564,15 @@ entry $w.maxsent -width 10 -relief sunken -textvariable midi(ps_maxsent) -font $
 checkbutton $w.ps_c -text "ignore line ends" -variable midi(ps_c) -font $df
 checkbutton $w.voices -text "select voices" -variable midi(bpsvoice) -font $df
 entry $w.voicesent -width 10 -textvariable midi(psvoice) -font $df
+radiobutton $w.psoutput -text "ps output" -font $df -value ps -variable midi(m2ps_output)
+radiobutton $w.svgoutput -text "svg output" -font $df -value svg -variable midi(m2ps_output)
+radiobutton $w.xhtmloutput -text "xhtml output" -font $df -value xhtml -variable midi(m2ps_output)
 
 grid $w.bref    $w.bar       -sticky w
 grid $w.ps_c    $w.hist      -sticky w
 grid $w.bnumb   $w.bppage    -sticky w
 grid $w.nolyric $w.noslur    -sticky w
-#grid $w.voices  $w.voicesent -sticky w
-#grid $w.maxvlab $w.maxvent   -sticky w
-#grid $w.maxslab $w.maxsent   -sticky w
+grid $w.psoutput $w.svgoutput $w.xhtmloutput -sticky w
 
 
 #       reformat property sheet
@@ -5507,7 +5687,7 @@ radiobutton $w.2.0 -text "output to clipboard"  -variable midi(g2v_clipboard) \
 radiobutton $w.2.1 -text "output to editor"     -variable midi(g2v_clipboard) \
         -relief flat -value 0  -font $df
 radiobutton $w.3.0 -text "gchords only" -font $df -variable dvoice -value 1
-radiobutton $w.3.1 -text "drums  only" -font $df -variable dvoice -value 2
+radiobutton $w.3.1 -text "drums only" -font $df -variable dvoice -value 2
 radiobutton $w.3.2 -text "gchords and drums" -font $df -variable dvoice -value 0
 pack $w.0
 pack $w.1.lab  $w.1.ent -side left -anchor w
@@ -6661,16 +6841,22 @@ proc switch_ps_button {} {
             grid forget .abc.psstyle.maxvlab .abc.psstyle.maxvent
             grid forget .abc.psstyle.maxslab .abc.psstyle.maxsent
             grid forget .abc.psstyle.voices  .abc.psstyle.voicesent
+            .abc.psform.pretty1 configure -state disable
+            .abc.psform.pretty2 configure -state disable
             grid .abc.psstyle.nolyric .abc.psstyle.noslur -sticky w
+            grid .abc.psstyle.psoutput .abc.psstyle.svgoutput .abc.psstyle.xhtmloutput -sticky w
             if {$midi(ps_fmt_flag) == 0} {
                 grid forget .abc.psform.glue .abc.psform.gluemenu}
             grid .abc.psform.other_opts .abc.psform.other_optsent -sticky w
         } else {
             .abc.functions.abc2ps config -text abc2ps
             grid forget .abc.psstyle.nolyric .abc.psstyle.noslur
+            grid forget .abc.psstyle.psoutput .abc.psstyle.svgoutput .abc.psstyle.xhtmloutput
             grid .abc.psstyle.voices .abc.psstyle.voicesent -sticky w
             grid .abc.psstyle.maxvlab .abc.psstyle.maxvent  -sticky w
             grid .abc.psstyle.maxslab .abc.psstyle.maxsent  -sticky w
+            .abc.psform.pretty1 configure -state normal
+            .abc.psform.pretty2 configure -state normal
             if {$midi(ps_fmt_flag) == 0} {
                 grid .abc.psform.glue .abc.psform.gluemenu -sticky w
                 grid forget .abc.psform.other_opts .abc.psform.other_optsent}
@@ -6740,10 +6926,7 @@ The arrow, page up/down, home, end keys allow you to scroll up and\
         The p key  or <space> will play the current selection and the d key will \
         display this selection. The E key will edit the file; the e key will\
         start up TclAbcEditor.\n\n\
-        When you right click any tune in the table of contents list box, a short\
-        descriptor of the tune will appear in a separate and resizeable window.\
-        If you want the entire tune shown then set 'summary_enabled' to 2.\n\n
-
+        
 
 Seymour.Shlien@crc.ca, 624 Courtenay Ave,  Ottawa, K2A 3B5, Canada, \
         Sept 9 2001."
@@ -6848,42 +7031,41 @@ set hlp_config_3 "Font Selector\n\n\
         I use the fixed font."
 
 
-set hlp_ps "Abc2ps and Abcm2ps Property Sheet\n\n\
-        This property page is used to select the options for the program \
-        abc2ps which converts the designated tune in the abc file into a \
+set hlp_ps "Abc2ps and Abcm2ps Style and Format Property Sheets\n\n\
+        This property page is used to select the options for the programs \
+        abc2ps and abcm2ps which converts the designated tune in the abc file into a \
         PostScript file and then displays the resulting file. The first three \
         check boxes allow you to indicate whether you want the X: reference \
         numbers, numbered bar numbers and historic notes appearing in the \
-        output score. Abc2ps usually uses the layout of the abc file for \
-        determining the number of bars in a line; however, if you check the box \
-        'ignore line ends', then it will fit in as many bars as possible.\n\
+        output score. Abc2ps and abcm2ps usually uses the layout of the abc\
+        file for determining the number of bars in a line; however, if\
+        you check the box 'ignore line ends', then it will fit in as many\
+        bars as possible.\n\n\
+        For best results, it is recommended that you use a layout file like \
+        letter.fmt which is provided with the distribution. This is a text \
+        file which can be edited and which allows you to control the font and size of \
+        many of the headings. Alternatively, you can try to control the layout \
+        using the other options which become available when \
+        you untick the check box labeled 'use layout file'. The factory \
+        settings were chosen for a low resolution screen. It is preferable\
+        that you run abcm2ps since abc2ps is no longer supported. Abcm2ps\
+        can also create svg and xhtml formatted output instead of\
+        ps (PostScript) files. The rest of this help is restricted to\
+        abc2ps.\n\n\
         Normally, abc2ps will display all voices included in the abc file. \
         It is possible to choose a subset of these voices by ticking the 'select \
         voices' check box and indicating in the entry box which voices are \
         desired (eg. 1-2, 5). The next time the 'display' button is clicked \
         only those voices will be presented. Note: abc2ps will complain of an \
         error and refuse to run if the selection box is ticked but there is nothing \
-        in the entry box.\n\n\
-        For best results, it is recommended that you use a layout file like \
-        letter.fmt which is provided with the distribution. This is a text \
-        file which can be edited and which allows you to control the font and size of \
-        many of the headings. Alternatively, you can try to control the layout \
-        using the other options provided by abc2ps which become available when \
-        you untick the check box labeled 'use layout file'. The factory \
-        settings were chosen for a low resolution screen. See the abc2ps.readme \
-        file which comes with the abc2ps distribution for more details. I \
-        recommend that you use the 'fill' 'glue' mode, but there may be cases \
-        where the other modes may be preferable.\n\n\
-        Some of the new abc files, in particular the multivoiced files, may be \
+        in the entry box.\n\n
+Some of the new abc files, in particular the multivoiced files, may be \
         too large for abc2ps in its standard settings. Since abc2ps must store the \
         entire score in memory, enough dynamic memory needs to be \
         allocated for all the voices and symbols. Abc2ps normally returns a \
         message (which you can view when you press the 'console' button) when it \
         runs out of space. You can increase the amount of dynamic memory \
-        allocated using the entry boxes provided.\n\n\
-        If you are running abcm2ps, there is an extra entry box where you\
-        include any missing run time parameters. For example, you may need\
-        to add --pslevel 1 in the entry box labeled other options."
+        allocated using the entry boxes provided.\n\n"
 
 set hlp_yaps "Yaps Property Sheet\n\n
 The page sizes, correspond to the choices available in \
@@ -8853,12 +9035,12 @@ set hlp_grouper \
 bind . <Alt-s> {runabc_diagnostic}
 bind . <Alt-S> {runabc_diagnostic}
 
-set abcmidilist {path_abc2midi 2.76\
-            path_abc2abc 1.65\
-            path_yaps 1.52\
-            path_midi2abc 2.91\
-            path_midicopy 1.08\
-            path_abcmatch 1.42}
+set abcmidilist {path_abc2midi 3.02\
+            path_abc2abc 1.68\
+            path_yaps 1.53\
+            path_midi2abc 2.92\
+            path_midicopy 1.10\
+            path_abcmatch 1.46}
 global abcmidilist
 
 proc runabc_diagnostic {} {
@@ -9717,7 +9899,8 @@ button $p.default -text "defaults" -font $df -command midi2abc_defaults
 button $p.playorig -text "play orig" -font $df -command play_original_midi
 button $p.playabc -text "play abc" -font $df -command play_generated_abc
 button $p.display -text "display" -font $df \
-        -command  {display_tunes [list $midi(midifileout)]
+        -command  {set ps_numb_start 0
+            display_tunes [list $midi(midifileout)]
             update_console_page}
 button $p.view -text view -font $df -command {tcl_abc_edit $midi(midifileout) 1}
 
@@ -11217,8 +11400,6 @@ proc unhighlight_track {num} {
     set highlighted_trk 0
 }
 
-#array set note {0 C  1 C#  2 D  3 D#  4 E  5 F  6 F#  7 G  8 G#  9 A   10 A# \
-#  11 B } all ready done
 
 
 proc midi_to_key {midipitch} {
@@ -11503,6 +11684,8 @@ proc pianoroll_statistics {choice} {
     set limits [midi_limits]
     set start [lindex $limits 0]
     set stop  [lindex $limits 1]
+    set exec_out "Pitch Class Distribution\n\n"
+    append exec_out "from $start to $stop\n\n"
     set tsel [count_selected_midi_tracks]
     
     foreach line [split $pianoresult \n] {
@@ -11580,21 +11763,27 @@ proc plotmidi_velocity_or_pitch_distribution {type} {
 
 proc show_note_distribution {} {
     global histogram
-    global scanwidth scanheight
-    global xlbx ytbx xrbx ybbx
     global exec_out total
     global start stop
-    set exec_out "Pitch Class Distribution\n\n"
-    append exec_out "from $start to $stop\n\n"
-    set xpos [expr $xrbx -40]
-    set notes {C C# D D# E F F# G G# A A# B}
+    global notedist
     for {set i 0} {$i < 13} {incr i} {
         set notedist($i) 0}
     for {set i 0} {$i <128} {incr i} {
         set index [expr $i % 12]
         set notedist($index) [expr $notedist($index) + $histogram($i)]
     }
+    plot_pitch_class_histogram
+}
+
+proc plot_pitch_class_histogram {} {
+    global scanwidth scanheight
+    global xlbx ytbx xrbx ybbx
+    global notedist
+    global total
+    global exec_out
+    set notes {C C# D D# E F F# G G# A A# B}
     set maxgraph 0.0
+    set xpos [expr $xrbx -40]
     for {set i 0} {$i < 13} {incr i} {
         if {$notedist($i) > $maxgraph} {set maxgraph $notedist($i)}
     }
@@ -12916,6 +13105,8 @@ proc display_entire_edit_window {} {
     global midi exec_out files
     global body_start body_end
     global abctxtw
+    global ps_numb_start
+    set ps_numb_start 0
     set dir "[pwd]/$midi(midi_dir)"
     set files ""
     set sel ""
@@ -13263,14 +13454,14 @@ proc new_drumpattern {} {
     global active_drumpattern
     global last_drumpattern
     global df
-#    set w .drumtool.ctl
+    #    set w .drumtool.ctl
     if {$last_drumpattern <= 7} {
         set active_drumpattern $last_drumpattern
         .drumtool.pat.$active_drumpattern configure -state normal
         highlight_selected_drum_pattern $active_drumpattern
         set token [.drumtool.pat.$active_drumpattern cget -text]
-     #   button $w.$last_drumpattern -text $token -command "add_drumvoice_token $token" -font $df
-#        pack $w.$last_drumpattern -side left
+        #   button $w.$last_drumpattern -text $token -command "add_drumvoice_token $token" -font $df
+        #        pack $w.$last_drumpattern -side left
         incr last_drumpattern
     }
 }
@@ -13295,7 +13486,7 @@ proc save_drumpatterns {} {
     
     for {set i 0} {$i < $last_drumpattern} {incr i} {
         set s $drumpatterns(D$i)
-        set s [string map {\[ \\\[ \] \\\]} $s] 
+        set s [string map {\[ \\\[ \] \\\]} $s]
         puts $handle "set drumpatterns(D$i) \"$s\""
     }
     close $handle
@@ -13424,6 +13615,7 @@ proc config_drumtool {} {
         button $p.rhythmbut -text enter -font $df -command {drumtool_consistency
             setup_drum_grid}
         label $p.beatstringlab -text beatstring -font $df
+        tooltip::tooltip .cfg_drumtool.beatstringlab  "use f,m,p to indicate strong,medium and weak beats eg. f3m2p2"
         entry $p.beatstring -width 20 -font $df -textvariable drumbeatstring
         button $p.beatbut -text enter -font $df -command drumtool_consistency
         label $p.msg -text "" -font $df
@@ -13565,7 +13757,7 @@ proc load_drumpatterns {} {
         eval $line
         if {[string first "drumpatterns" $line] > 0} {incr n}
     }
-    create_abc_drum_rep 
+    create_abc_drum_rep
     
     for {set i 0} {$i < $n} {incr i} {
         .drumtool.pat.$i configure -state normal
@@ -14270,6 +14462,8 @@ namespace eval gchordsetup {
     variable barunits
     variable noteunits
     
+    global hasgchordstring
+    
     set default_gchord(2/2) fzczfzcz
     set default_gchord(2/4) fzczfzcz
     set default_gchord(4/4) fzczfzcz
@@ -14296,9 +14490,10 @@ namespace eval gchordsetup {
         if {[info exist default_gchord($meter)]} {
             set gchordstring $default_gchord($meter)
             set gcstring::gcstringlist [gcstring::scangchordstring $gchordstring]
+        } elseif {$hasgchordstring} {
+            g2v_errormsg "MIDI gchord string embedded in abc file"
         } else {
             g2v_errormsg  "no default gchord string for this meter"
-            puts "no default"
         }
         if {[info exists noteunits]} return
         if {[expr double($m1)/$m2] < 0.75} {
@@ -14510,11 +14705,12 @@ namespace eval gcstring {
                 g2v_errormsg  "[string index $gc $i] is not a legal gchord code"}
             set gchordelem  [string range $gc $loc1 $loc2]
             lappend gcstringlist $gchordelem
+            # puts $gcstringlist
             if {[string length $gchordelem] > 1} {
                 set n [string index $gchordelem 1]
             } {set n 1}
             incr gc_string_length $n
-            set i [expr $loc1+1]
+            set i [expr $loc2+1]
         }
         #puts "gc_string_length=$gc_string_length"
         #puts $gcstringlist
@@ -14958,7 +15154,7 @@ namespace eval drumgen {
 }
 
 
-set dvoice 0
+set dvoice 1
 
 global chordnames
 
@@ -15165,7 +15361,7 @@ proc process_line {line} {
                 if {$activevoice == $chosenvoice} {
                     set chosenvoicefound 1
                     gv_process_note [string range $line $loc1 $loc2]
-                    gcgen::gchord_generator
+                    if {$dvoice != 2} {gcgen::gchord_generator}
                     if {$dvoice != 1} {
                         drumgen::drum_generator
                     }
@@ -15420,6 +15616,7 @@ proc g2v_startup {} {
     global tunestring
     global gvmsg
     global midi
+    global hasgchordstring
     set gvmsg ""
     g2v_clear_errormsg
     show_g2v_page
@@ -15439,6 +15636,8 @@ proc g2v_startup {} {
         set gvchordstring $midi(mychord)} else {
         if {[info exist gchordsetup::default_gchord($gvmeter)]} {
             set gvchordstring $gchordsetup::default_gchord($gvmeter)
+        } elseif {$hasgchordstring} {
+            g2v_errormsg "MIDI gchord string embedded in abc file"
         } else {
             g2v_errormsg  "no default gchord string for this meter"
         }
@@ -15449,7 +15648,8 @@ proc g2v_startup {} {
 proc g2v_errormsg {msg} {
     global gvmsg exec_out
     set exec_out $exec_out\n$msg
-    if {[string length $gvmsg] < 1} {set gvmsg $msg}
+    if {[string length $gvmsg] < 1} {set gvmsg $msg} else {
+        set gvmsg $gvmsg\n$msg}
     .abc.g2v.msg.txt configure -text $gvmsg -foreground red
 }
 
@@ -15478,9 +15678,12 @@ proc g2v {} {
     
     global recover_key key_change
     global recover_meter meter_change
+    global barpickerflag
     
     set fieldtext ""
     set bodytext ""
+    set barpickerflag 1
+    
     
     set gchordsetup::default_gchord($gvmeter) $gvchordstring
     g2v_clear_errormsg
@@ -15551,7 +15754,6 @@ proc extract_tune_info {} {
     }
     close $handle
     #puts $tunestring
-    set barpickerflag 0
     extract_tune_features $tunestring
     if {[info exist hasfield(MIDI)]} {midi1_msg "The tune already has MIDI directives. You would\n need to override them if you wish to change them."}
 }
@@ -15586,10 +15788,12 @@ proc extract_tune_features {tunestring} {
             append hasfield(Q) $line\n}
         if {[string first "T:" $line] == 0 } {
             append hasfield(T) $line\n}
+        if {[string first "W:" $line] == 0} {
+            append hasfield(W) $line\n}
         if {[string first "%%MIDI" $line] == 0} {
             append hasfield(MIDI) $line\n}
         if {[string first "\"" $line] >= 0} {
-            append hasfield(gc) $line\n}
+            set hasfield(gc) " "}
         
         
     }
@@ -15599,14 +15803,16 @@ proc extract_tune_features {tunestring} {
 proc finish_tune {} {
     global hasfield tunenote
     global nvoices nbars
+    global hasgchordstring
     set tunenote {}
     set codelist ""
-# set nvoices to 0 so voice doubling works
+    # set nvoices to 0 so voice doubling works
     set nvoices 0
-    foreach  code {T B C O P Z N S R F Q gc MIDI} {
+    foreach  code {T B C O P Z N S R F Q W gc MIDI} {
         if {[info exist hasfield($code)]} {
             #if {[string length $tunenote] >  0} {set tunenote $tunenote\n}
             set tunenote $tunenote$hasfield($code)
+            #puts "code = $code\n$hasfield($code)"
             if {$code != "MIDI"} {
                 set codelist "$codelist$code: "
             } else {
@@ -15616,6 +15822,11 @@ proc finish_tune {} {
     }
     .abc.titles.notes.but configure -text $codelist
     if {[winfo exist .headers]} Refactor::header_window
+    set hasgchordstring 0
+    if {[info exist hasfield(MIDI)]} {
+        if {[string first "gchord " $hasfield(MIDI)] > 0} {set hasgchordstring 1}
+    }
+    if {[winfo exist .pitchclass]} note_histogram
 }
 
 
@@ -15645,6 +15856,8 @@ proc display_section {} {
     global console_clock
     global active_sheet
     global exec_out
+    global ps_numb_start firstbar
+    set ps_numb_start $firstbar
     set console_clock [clock seconds]
     Refactor::output_file_direct
     display_tunes [list $midi(midi_dir)/X.tmp]
@@ -15814,19 +16027,19 @@ namespace eval Refactor {
             $abctxtw tag bind $component <ButtonPress-1> [list Barpicker::barclick $component]
         }
     }
-
+    
     proc appendx {piece} {
         global abctxtw
         global xcomponent
         global tunepieces
         global barpickerflag
         if {$barpickerflag} {
-           $abctxtw insert end $piece $xcomponent
-           $abctxtw tag bind $xcomponent <ButtonPress-1> [list Barpicker::barclick $xcomponent]
-           }
+            $abctxtw insert end $piece $xcomponent
+            $abctxtw tag bind $xcomponent <ButtonPress-1> [list Barpicker::barclick $xcomponent]
+        }
         append tunepieces($xcomponent) $piece
     }
-
+    
     
     proc make_component_name {} {
         global partname
@@ -15910,10 +16123,14 @@ namespace eval Refactor {
                     -font $df -exportselection false
             scrollbar $p.ysbar -orient vertical -command {.headers.t yview}
             scrollbar $p.xsbar -orient horizontal -command {.headers.t xview}
+            button $p.more -text more... -font $df -bd 0\
+                    -command Refactor::show_more
             pack $p.ysbar -side right   -fill y -in $p
             pack $p.xsbar -side bottom  -fill x -in $p
             pack $p.t -fill both -expand y -in $p
+            pack $p.more -anchor w
         }
+        $p.more configure -state normal
         $p.t delete 0.0 end
         #$p.t tag configure link -foreground darkblue
         set linkindex 0
@@ -15931,6 +16148,25 @@ namespace eval Refactor {
     }
     
     
+    proc show_more {} {
+        global midi
+        set tunestring [return_selected_tune]
+        set p .headers
+        $p.t delete 0.0 end
+        set linkindex 0
+        foreach line [split $tunestring \n] {
+            if {[string first "F:" $line] == 0} {
+                $p.t tag configure m$linkindex -foreground darkblue
+                $p.t insert end $line\n m$linkindex
+                set url [string range $line 2 end]
+                $p.t tag bind m$linkindex <1> "exec [list $midi(path_internet)] $url &"
+                incr linkindex
+            } else {
+                $p.t insert end $line\n
+            }
+        }
+        $p.more configure -state disable
+    }
     
     proc myputs {out_fd mydata} {
         # this version saves the last output character in case
@@ -15942,21 +16178,22 @@ namespace eval Refactor {
         puts -nonewline $out_fd $mydata
     }
     
-   proc extract_comments_for_voice {i} {
-    # extracts comments like %%MIDI program command
-    # and field commands like L:1/8 from tunepieces()
-    global tunepieces
-    global firstbar lastbar
-    set saved_elements {}
-    for {set j 0} {$j < $firstbar} {incr j} {
-        if {[info exist tunepieces(x-$i-$j)]} {
+    proc extract_comments_for_voice {i} {
+        # extracts comments like %%MIDI program command
+        # and field commands like L:1/8 from tunepieces()
+        global tunepieces
+        global firstbar lastbar
+        set saved_elements {}
+        for {set j 0} {$j < $firstbar} {incr j} {
+            if {[info exist tunepieces(x-$i-$j)]} {
                 lappend saved_elements $tunepieces(x-$i-$j)
-                }
+                #        puts "x-$i-$j = $tunepieces(x-$i-$j)"
+            }
         }
-    return $saved_elements
-}
-
- 
+        return $saved_elements
+    }
+    
+    
     
     proc output_file_direct {} {
         # creates a tmp.abc file from the info in tunepieces
@@ -15985,9 +16222,9 @@ namespace eval Refactor {
             for {set n 0} {$n < $nvoices} {incr n} {
                 set voice [lindex $voicelist $n]
                 set vital_info [extract_comments_for_voice $voice]
-                #puts $out_fd V:$voice
+                puts $out_fd V:$voice
                 foreach elem $vital_info {
-                    puts $out_fd $elem
+                    myputs $out_fd $elem
                 }
                 for {set i $firstbar} {$i < $lastbar} {incr i} {
                     if {![info exist tunepieces($voice-$i)]} continue
@@ -16011,7 +16248,7 @@ namespace eval Refactor {
             # for tunes with no voices
             set vital_info [extract_comments_for_voice 0]
             foreach elem $vital_info {
-                puts $out_fd $elem
+                myputs $out_fd $elem
             }
             for {set i $firstbar} {$i < $lastbar} {incr i} {
                 if {![info exist tunepieces(0-$i)]} continue
@@ -16041,10 +16278,10 @@ namespace eval Refactor {
         set clist [array names tunepieces]
         set clist [lsort $clist]
         foreach elem $clist {
-           # puts "$elem $tunepieces($elem)"
-           append exec_out "$elem\t $tunepieces($elem)\n"
+            # puts "$elem $tunepieces($elem)"
+            append exec_out "$elem\t $tunepieces($elem)\n"
         }
-    show_console_page $exec_out char
+        show_console_page $exec_out char
     }
     
     
@@ -16075,7 +16312,7 @@ namespace eval Refactor {
         
         #check_nbarsv
         $abctxtw insert end $tunepieces(head) head
-       # $abctxtw tag bind head <ButtonPress-1> [list barclick head]
+        # $abctxtw tag bind head <ButtonPress-1> [list barclick head]
         if {$nvoices < 1} {.abc.reformat.mesg configure -text "no voices are present"
             reconstitute_pieces_separate_voices
             return
@@ -16101,19 +16338,19 @@ namespace eval Refactor {
                 for {set j 0} {$j < $barsperline} {incr j} {
                     set k [expr $i + $j]
                     if {$k >= $nbarsv($voice)} break
-                   # put any comments or field commands on a new line
+                    # put any comments or field commands on a new line
                     if {[info exist tunepieces(x-$voice-$k)]} {
-                       if {$lastchar != "\n"} {
-                        $abctxtw insert end "\n"
-                        set lastchar "\n"}
+                        if {$lastchar != "\n"} {
+                            $abctxtw insert end "\n"
+                            set lastchar "\n"}
                         $abctxtw insert end $tunepieces(x-$voice-$k) x-$voice-$k
-#                        $abctxtw tag bind x-$voice-$k <ButtonPress-1> [list barclick x-$voice-$k]
-                        }
+                        #                        $abctxtw tag bind x-$voice-$k <ButtonPress-1> [list barclick x-$voice-$k]
+                    }
                 }
-                    $abctxtw insert end $tunepieces($voice-$k) $voice-$k
-#                    $abctxtw tag bind $voice-$k <ButtonPress-1> [list barclick $voice-$k]
+                $abctxtw insert end $tunepieces($voice-$k) $voice-$k
+                #                    $abctxtw tag bind $voice-$k <ButtonPress-1> [list barclick $voice-$k]
             }
-
+            
             incr i $barsperline
         }
     }
@@ -16127,7 +16364,7 @@ namespace eval Refactor {
         set fieldpat {^L:|^M:|^K:|^Q:|^w:}
         $abctxtw delete 1.0 end
         $abctxtw insert end $tunepieces(head) head
-#        $abctxtw tag bind head <ButtonPress-1> [list barclick head]
+        #        $abctxtw tag bind head <ButtonPress-1> [list barclick head]
         set barsminus1 [expr $barsperline - 1]
         if {$nvoices >= 1} {
             # for multivoiced tunes
@@ -16138,15 +16375,15 @@ namespace eval Refactor {
                     if {![info exist tunepieces($voice-$i)]} continue
                     set lastchar [$abctxtw get "end -2 chars"]
                     if {[info exist tunepieces(x-$voice-$i)]} {
-                      if {$lastchar != "\n"} {
-                        $abctxtw insert end "\n"
-                        set lastchar "\n"}
-                      $abctxtw insert end $tunepieces(x-$voice-$i) x-$voice-$i
-                        }
-
-                     $abctxtw insert end $tunepieces($voice-$i) $voice-$i
-                     set lastchar [$abctxtw get "end -2 chars"]
-
+                        if {$lastchar != "\n"} {
+                            $abctxtw insert end "\n"
+                            set lastchar "\n"}
+                        $abctxtw insert end $tunepieces(x-$voice-$i) x-$voice-$i
+                    }
+                    
+                    $abctxtw insert end $tunepieces($voice-$i) $voice-$i
+                    set lastchar [$abctxtw get "end -2 chars"]
+                    
                     $abctxtw insert end $tunepieces($voice-$i) $voice-$i
                     set lastchar [$abctxtw get "end -2 chars"]
                     if {[expr $i % $barsperstaff] == 0 && $lastchar != "\n"} {
@@ -16229,8 +16466,193 @@ set hlp_reformat "Reformat\n\n\
 
 
 
+proc note_histogram {} {
+    global midi sel
+    global exec_out
+    set sel [title_selected]
+    set sel [tune_picked $sel $midi(abc_open)]
+    set cmd "exec [list $midi(path_abcmatch)] [list $midi(midi_dir)/X.tmp]"
+    append cmd " -wpitch_hist"
+    catch {eval $cmd} exec_out
+    interpret_note_histogram
+}
+
+proc interpret_note_histogram {} {
+global exec_out
+global total
+global histogram
+global midi
+set total 0
+for {set i 0} {$i < 128} {incr i} {set histogram($i) 0}
+set results [split $exec_out "\n"]
+foreach line $results {
+  if {[llength $line] == 2} {
+     scan $line "%d %d" pitch freq
+     if {$pitch == 0} continue
+     set histogram($pitch) $freq
+     incr total $freq
+     }
+  }
+
+if {$total < 1} {messages "You are running an old version of abcmatch. It\
+should be 1.46 or higher."
+                 return
+                }
+
+for {set i 0} {$i < 128} {incr i} {
+    set histogram($i) [expr $histogram($i)/double($total)]
+    }
+show_note_distribution
+if {$midi(mode_guess) == "mse"} {
+  guess_mode_mse} else {
+  guess_mode_correlation}
+}
 
 
+
+array set mode_reference {
+        maj {4 0 2 0 3 2 0 3 0 2 0 2}
+        min {4 0 2 3 0 2 0 3 2 0 0 2}
+        dor {4 0 2 3 0 2 0 3 0 2 2 0}
+        phr {4 2 0 3 0 2 0 3 2 0 2 0}
+        lyd {4 0 2 0 3 0 2 3 0 2 0 2}
+        mix {4 0 2 0 3 2 0 3 0 2 2 0}
+        aeo {4 0 2 3 0 2 0 3 2 0 2 0}
+}
+
+array set mode_reference {
+    penmaj {
+        3 0 2 0  2 0 0 3  0 2 0 0
+    }
+    penmin {
+        3 0 0 2  0 2 0 3  0 0 2 0
+    }
+    whole {
+        2 0 1 0 1 0 1 0 1 0 1 0
+    }
+    octatonic-HalfWhole {
+        2 1 0 1.5  1.5 0 1 1.5  0 1 1 0
+    }
+    octatonic-WholeHalf {
+        3 0 2 2  0 2 2 0  2 2 0 2
+    }
+
+}
+
+
+array set modenames {maj major min minor dor dorian phr phrygian lyd lydian mix\
+ mixolydian aeo "natural minor" penmaj pentatonic-major penmin pentatonic-minor\
+ whole whole-tone}
+
+set hlp_pitchclass "Mode Determination\n\n\
+The program attempts to estimate the key and mode of the\
+tune based on the distribution of the musical pitches (weighted\
+by the note length). The distribution is compared to the\
+expected patterns for the different modes either\
+using the correlation measure or the euclidean\
+distance (selected by the user). The five best\
+hypotheses are listed with the preferred one at the\
+top."
+
+
+
+proc guess_mode_correlation {} {
+    global notedist
+    global mode_reference
+    set scorelist {}
+    foreach mode {maj min dor phr lyd mix aeo penmaj penmin whole} {
+      set ref $mode_reference($mode)
+#     compute reference mean
+      set rmean 0
+      for {set k 0} {$k < 12} {incr k} {      
+        set rmean [expr $rmean + [lindex $ref $k]]
+        }
+      set rmean [expr $rmean/12.0]
+      for {set k 0} {$k < 12} {incr k} {
+        set dotprod 0.0
+        set d1sum 0.0
+        set d2sum 0.0
+        for {set i 0} {$i < 12} {incr i} {
+          set multiplier [lindex $ref [expr ($i - $k + 12) % 12]]
+# subract the expected mean
+          set multiplier [expr $multiplier - $rmean] 
+          set notelikelihood [expr $notedist($i) - 0.083333333]
+          set elem [expr $notelikelihood * $multiplier]
+          set d1 [expr $multiplier * $multiplier]
+          set d2 [expr $notelikelihood * $notelikelihood]
+          set dotprod [expr $dotprod + $elem]
+          set d1sum [expr $d1sum + $d1]
+          set d2sum [expr $d2sum + $d2]
+          }
+        set correlation [expr $dotprod / sqrt($d1sum * $d2sum)]
+        #set score [list $dotprod [list $mode $k]]
+        set score [list $correlation [list $mode $k]]
+        lappend scorelist $score
+        } 
+      }
+   set scoreresults [lsort -index 0 -decreasing -real  $scorelist]
+   show_mode_guess_results $scoreresults
+}
+
+proc guess_mode_mse {} {
+    global notedist
+    global mode_reference
+    set scorelist {}
+    foreach mode {maj min dor phr lyd mix aeo penmaj penmin whole} {
+      set ref $mode_reference($mode)
+      set refsum 0.0
+      for {set k 0} {$k < 12} {incr k} {
+          set refsum [expr $refsum + [lindex $ref $k]]
+          }
+      for {set k 0} {$k < 12} {incr k} {
+        set summedsqerr 0.0
+        for {set i 0} {$i < 12} {incr i} {
+          set predicted [lindex $ref [expr ($i - $k + 12) % 12]]
+          set predicted [expr $predicted /$refsum]
+          set err [expr $predicted - $notedist($i)]
+        #  puts "[format %6.3f $predicted] [format %6.3f $notedist($i)] [format %6.3f $err] [format %7.5f $summedsqerr]"
+          set summedsqerr [expr $err*$err + $summedsqerr]
+          }
+        set euclid [expr sqrt($summedsqerr)]
+        set score [list $euclid [list $mode $k]]
+        lappend scorelist $score
+        } 
+      }
+   set scoreresults [lsort -index 0 -increasing -real  $scorelist]
+   show_mode_guess_results $scoreresults
+}
+
+
+proc show_mode_guess_results {scoreresults} {
+    global note
+    global midi
+    global hlp_pitchclass
+    global modenames
+  
+    if {[winfo exists .pitchclass.d] != 0} {
+        destroy .pitchclass.d
+        }
+    pack [frame .pitchclass.d]
+    set w .pitchclass.d.c
+    pack [frame .pitchclass.d.c] [frame .pitchclass.d.r] -side left
+    radiobutton $w.cor -text "correlation" -command guess_mode_correlation -variable midi(mode_guess) -value cor
+    radiobutton $w.euc -text "euclid distance" -command guess_mode_mse -variable midi(mode_guess) -value mse
+    button $w.help -text "help" -command {show_message_page $hlp_pitchclass word}
+    pack $w.cor $w.euc $w.help -side bottom -anchor w
+    for {set i 0} {$i < 5} {incr i} {
+      set guess [lindex $scoreresults $i]
+      set val [lindex $guess 0]
+      set val [format "%7.4f    " $val]
+      set model [lindex $guess 1]
+      set mode [lindex $model 0]
+      set key $note([lindex $model 1])
+      set w .pitchclass.d.r
+      label $w.0$i -text $val
+      label $w.1$i -text $key
+      label $w.2$i -text $modenames($mode) 
+      grid $w.0$i $w.1$i $w.2$i
+      }
+    }
 
 # main program starts here
 
