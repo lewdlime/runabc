@@ -4,7 +4,7 @@
 # the next line restarts using wish \
 exec wish8.5 "$0" "$@"
 #
-# runabc.tcl - by seymour.shlien@crc.ca
+# runabc.tcl - by Seymour Shlien  fy733@ncf.ca
 # This is graphics user interface to the abc2midi and abc2ps programs.
 # This script and the above programs are public domain.
 # multiple select by ste_mi@yahoo.com
@@ -33,8 +33,8 @@ exec wish8.5 "$0" "$@"
 #      http://ifdo.pugmarks.com/~seymour/runabc/top.html
 
 
-set runabc_version 1.948
-set runabc_date "(July 21 2015 08:00)"
+set runabc_version 1.970
+set runabc_date "(December 10 2015 10:30)"
 set tcl_version [info tclversion]
 set startload [clock clicks -milliseconds]
 #lappend auto_path /usr/share/tcltk/tk8.5
@@ -115,6 +115,7 @@ if {[catch {package require Ttk} error]} {
 # gchordentry    gchord for tune
 # midigchord     preserved gchord pattern for meter
 # dvoice         for g2v (gchords/drums to voices)
+# modifiedflag   live editor modified
 
 #  Graphical User Interface
 
@@ -464,7 +465,17 @@ proc ::tooltip::enableCanvas {w args} {
 # Part 2.0       Start up
 
 
-wm protocol . WM_DELETE_WINDOW {confirm_save; write_runabc_ini $runabcpath; exit}
+
+wm protocol . WM_DELETE_WINDOW {
+    if  {[winfo exist .live]} {
+            if {[.live.right.editor.t edit modified]} {
+               update_wholefile}
+               }
+    confirm_save
+    write_runabc_ini $runabcpath
+    exit
+    }
+
 wm resizable . 1 1
 global df
 global ps_numb_start # used by display_section
@@ -939,12 +950,14 @@ proc midi_init {} {
     set midi(live_editor) 1
     set midi(livehotspots) 0
     set midi(livescale) 0.85
+
+    set midi(use_midi_header) 1
+    set midi(use_ps_header) 1
 }
 
 # save all options, current abc file
 proc write_runabc_ini {runabcpath} {
     global midi
-    
     set outfile [file join $runabcpath runabc.ini]
     set handle [open $outfile w]
     #tk_messageBox -message "writing $outfile"  -type ok
@@ -1308,10 +1321,12 @@ frame .abc.titles
 if {[info exists abc_open]} {set midi(abc_open) $abc_open}
 entry .abc.file.entry -width 62 -relief sunken -textvariable midi(abc_open) \
         -font $df
-bind .abc.file.entry <Return> {
-    load_whole_file $midi(abc_open)
-    title_index $midi(abc_open)
-    focus .abc.titles
+bind .abc.file.entry <KeyRelease> {
+    if {[file exists $midi(abc_open)] && [file isfile $midi(abc_open)]} {
+        load_whole_file $midi(abc_open)
+        title_index $midi(abc_open)
+        focus .abc.titles
+       }
 }
 
 set w .abc.file.menu
@@ -1333,6 +1348,8 @@ button .abc.functions.quit -text exit -image exit-22 \
         -font $df -borderwidth 2
 button .abc.functions.play -text play -font $df -image kmix-16  -command play_action -borderwidth 2
 button .abc.functions.disp -text display -font $df -image print-22 -command display_action -borderwidth 2
+# suppress calling firefox if right button pressed
+bind .abc.functions.disp <Button-3> {display_action 0}
 
 set w .abc.functions.editmenu
 menubutton $w -text edit -font $df -image edit-22 -relief raised  -menu $w.type -font $df -borderwidth 2
@@ -1419,7 +1436,7 @@ menu .abc.functions.midi.type -tearoff 0
 .abc.functions.midi.type add command -label "midi2abc"   -font $df  -command show_midi2abc_page
 .abc.functions.midi.type add command -label "midishow"   -font $df  -command piano_window
 .abc.functions.midi.type add command -label "drum events" -font $df -command drumroll_window
-.abc.functions.midi.type add command -label "mftext"     -font $df  -command mftextwindow
+.abc.functions.midi.type add command -label "mftext"     -font $df  -command {mftextwindow $midi(midifilein) 0}
 
 # second row of buttons
 button .abc.functions.toc -text toc -image content-22 -command show_titles_page -borderwidth 2 -font $df
@@ -1493,12 +1510,14 @@ $w.type add command  -label "abc executables" -command {show_config_page 1} -fon
 $w.type add command  -label "player"        -command {show_config_page 2} -font $df
 $w.type add command  -label "font"            -command {show_config_page 4} -font $df
 $w.type add command -label "character encoding" -command {show_config_page 5} -font $df
+$w.type add checkbutton  -label "use ps header" -font $df -variable midi(use_ps_header)
+$w.type add checkbutton -label "use midi header" -font $df -variable midi(use_midi_header)
+$w.type add checkbutton -label "index by position" -variable midi(index_by_position) -font $df
+$w.type add checkbutton -label "ignore blank lines" -variable midi(blank_lines)  -font $df
 $w.type add command  -label "check integrity"       -command check_integrity -font $df
 $w.type add command  -label "sanity check"    -command {runabc_diagnostic}  -font $df
-$w.type add checkbutton -label "ignore blank lines" -variable midi(blank_lines)  -font $df
 $w.type add checkbutton -label "bell on file write" -variable midi(bell_on)  -font $df
 $w.type add checkbutton -label "no confirm for unsaved file" -variable midi(noconfirmsave)  -font $df
-$w.type add checkbutton -label "index by position" -variable midi(index_by_position) -font $df
 $w.type add checkbutton -label "reveal button labels" -variable midi(buttonlabels) -command button_label_action -font $df
 $w.type add checkbutton -label "activate live editor" -variable midi(live_editor) -command switch_live_editor -font $df
 $w.type add command  -label "load runabc extension"    -command {load_extension}  -font $df
@@ -1758,7 +1777,7 @@ set yaps_ptsize {612x792 792x1224 1224x792 612x1008 396x612 540x720 \
             612x777  720x1008}
 
 
-proc display_action {} {
+proc display_action {{svgviewer 1}} {
     global midi
     global console_clock
     global active_sheet
@@ -1766,15 +1785,42 @@ proc display_action {} {
     global ps_numb_start
     set console_clock [clock seconds]
     set sel [title_selected]
-    copy_selected_files $sel w 0 X.tmp
+    copy_selected_tunes_for_display $sel X.tmp
     set ps_numb_start 0
-    display_tunes X.tmp
+    display_tunes X.tmp $svgviewer
     update_console_page
 }
 
 
+proc copy_selected_tunes_for_display {sel filename} {
+    #copies or appends all selected tunes to an output file
+    global fileseek midi exec_out
+    global ps_header
+    global midi
+    set edithandle [open $midi(abc_open) r]
+    set outhandle [open $filename w]
+    set exec_out "copying $sel to $filename"
+    foreach i $sel {
+        set loc $fileseek($i)
+        seek $edithandle $loc
+        set line [find_X_code $edithandle]
+        puts $outhandle $line
+        if {[string length $ps_header] > 0 && $midi(use_ps_header)} {puts $outhandle $ps_header}
+        incr n
+        while {[string length $line] > 0 } {
+            if {$midi(blank_lines)} {
+                set line  [get_nonblank_line $edithandle]} else {
+                set line  [get_next_line $edithandle]}
+            if {[string index $line 0] == "X"} break;
+            puts $outhandle $line
+        }
+        puts $outhandle "\n"
+    }
+    close $edithandle
+    close $outhandle
+}
 
-proc display_tunes {abcfile} {
+proc display_tunes {abcfile {svgviewer 1}} {
     global midi
     global yaps_ptsize exec_out
     global ps_numb_start
@@ -1869,7 +1915,12 @@ proc display_tunes {abcfile} {
         set exec_abcmps "$cmd\n\n$exec_out"
     }
     
-    
+    # Do not start another svg viewer if svgview is 0
+    if {!$svgviewer} {
+           set exec_out "$exec_abcmps\n$cmd\n\n$exec_out" 
+           return 
+           }
+
     if {$midi(ps_creator) == "abcm2ps"} {
         if {$midi(m2ps_output) == "svg" } {
             set cmd "exec [list $midi(path_internet)] file://[list [pwd]/Out001.svg] &"
@@ -2032,6 +2083,7 @@ proc update_history {openfile} {
 
 proc process_history {} {
     global midi history_index active_sheet
+    global modifiedflag
     if {![file exist $midi(history$history_index)]} {
         show_message_page\
                 "can't read input abc file\n$midi(history$history_index)" word
@@ -2095,7 +2147,8 @@ proc title_index {abcfile} {
     global item_id
     global index_done
     global df
-    global abc_header
+    global midi_header
+    global ps_header
 
     if {[info exist itemposition]} {unset itemposition}
     if {$abc_file_mod} {
@@ -2121,7 +2174,8 @@ proc title_index {abcfile} {
     .abc.titles.t tag configure tune -font $df
 
     #extract any %%MIDI commands in the header
-    set abc_header {}
+    set midi_header {}
+    set ps_header {}
     while {[gets $titlehandle line] >= 0} {
         if {[string index $line 0] == "X"} {
             regexp $pat $line number
@@ -2129,10 +2183,18 @@ proc title_index {abcfile} {
             set srch T
             break
             }
-        if {[string first "%%MIDI" $line] == 0} {
-            append abc_header $line\n
-            }
+        if {[string first "%%MIDI" $line] == 0 } {
+            append midi_header $line\n
+        } elseif {[string first "%%" $line] == 0 } {
+            append ps_header $line\n
+            if {[string first "%%beginps" $line] == 0} {
+              while {[gets $titlehandle line] >= 0} {
+                  append ps_header $line\n
+                  if {[string first "%%endps" $line] == 0} break
+                  }
+             }
         }
+    }
 
 
     while {[gets $titlehandle line] >= 0} {
@@ -2191,7 +2253,7 @@ proc title_index {abcfile} {
         }
     }
     close $titlehandle
-    #puts -nonewline $abc_header
+    #puts -nonewline $midi_header
     if {$i == 0} {show_error_message "corrupted file $midi(abc_open)\nno K:,X:,T: found in file."
         return}
     if {$i < 15} {
@@ -2201,12 +2263,13 @@ proc title_index {abcfile} {
         .abc.titles.t configure -height 15
         set midi(abc_save) edit.abc
     }
-    #puts "item id for $itemposition = $item_id($itemposition)"
-    if {[info exist itemposition]} {
+    if {[info exist itemposition] && [info exist item_id($itemposition)]} {
+         #puts "item id for $itemposition = $item_id($itemposition)"
         .abc.titles.t selection set $item_id($itemposition)
         .abc.titles.t see $item_id($itemposition)
     }
     update
+    set ps_header [string trimright $ps_header]
 }
 
 proc SortBy {col direction} {
@@ -2249,16 +2312,34 @@ proc title_selected {} {
 
     set index [.abc.titles.t selection]
     #puts "title_selected =  [winfo exist .live]"
+    #puts "title_selected index = $index"
+    set xref [lindex [.abc.titles.t item $index -values] 0]
+    #puts "xref = $xref"
     if {$midi(live_editor)} {
        if {![winfo exist .live]} {switch_live_editor}
        set tunestart $fileseek($index)
-       set tuneend [update_live_editor $tunestart]
+       set tuneend [update_live_editor $tunestart $xref]
        .live.right.editor.t edit modified 0
        }
     return $index
 }
 
 proc update_wholefile_and_toc {} {
+     global midi
+     update_wholefile
+     set edited_wholefile $midi(abc_open)
+     set index [.abc.titles.t selection]
+     set loc [.abc.titles.t bbox $index]
+     set locx [lindex $loc 0]
+     set locy [lindex $loc 1]
+     load_whole_file $edited_wholefile
+     .live.right.editor.t edit modified 0
+     title_index $edited_wholefile
+     set new_index [.abc.titles.t identify item $locx [expr $locy+2]]
+     .abc.titles.t selection set $new_index
+     }
+
+proc update_wholefile {} {
      global tunestart tuneend wholefile
      global runabcpath
      global midi
@@ -2273,24 +2354,15 @@ proc update_wholefile_and_toc {} {
 
      set choice yes
      #set choice [tk_messageBox -type yesno -default yes \
-     #           -message "You have modified $edited_wholefile. Do you wish to save it before closing?"\
-     #           -icon question]
+                -message "You have modified $edited_wholefile. Do you wish to save it before closing?"\
+                -icon question]
      if {$choice == yes} {
           set backup_abcfile $edited_wholefile.bak
           file rename -force $edited_wholefile $backup_abcfile
           file rename -force $runabcpath/livetemp.tmp $edited_wholefile
-     #     tk_messageBox -type ok -message "The original version was saved in $backup_abcfile"
+          #tk_messageBox -type ok -message "The original version was saved in $backup_abcfile"
           }
-     set index [.abc.titles.t selection]
-     set loc [.abc.titles.t bbox $index]
-     set locx [lindex $loc 0]
-     set locy [lindex $loc 1]
-     load_whole_file $edited_wholefile
-     .live.right.editor.t edit modified 0
-     title_index $edited_wholefile
-     set new_index [.abc.titles.t identify item $locx [expr $locy+2]]
-     .abc.titles.t selection set $new_index
-     }
+    }
 
 
 proc get_nonblank_line {handle} {
@@ -2366,7 +2438,7 @@ proc tune2Xtmp {tunes abcfile} {
     global drumentry mididrum pickedmeter
     global gchordentry midigchord
 
-    global abc_header
+    global midi_header
  
     set inp_fd [open $abcfile r]
     set out_fd [open X.tmp w]
@@ -2387,8 +2459,8 @@ proc tune2Xtmp {tunes abcfile} {
         set line [find_X_code $inp_fd]
         if {[string index $line 0] == "X"} {
             puts $out_fd $line
-            if {[string length $abc_header] > 0} {
-                puts -nonewline $out_fd $abc_header
+            if {[string length $midi_header] > 0 && $midi(use_midi_header)} {
+                puts -nonewline $out_fd $midi_header
                 }
             scan $line "X:%d" track
             lappend outlist $track
@@ -3089,10 +3161,12 @@ set hlp_editor \
         vertically. If the algorithm works correctly, the formatting\
         should  not change the way the music is converted to a postscript\
         file or midi file. The function is applied on the entire contents\
-        of the edit window; therefore, you should only load a single tune.\n\
+        of the edit window; therefore, you should only load a single tune.\
         The tools/squeeze bars does the reverse of above. It replaces\
         any sequence of spaces with a single space. The tune is harder to\
-        read but otherwise it is the same as before.\n\n\n\n\
+        read but otherwise it is the same as before.\n\n\
+        The tools/add guitar chords inserts the appropriate guitar chords\
+        based on the notes in the bar.\n\n\n\n\
         Text Widget standard binding.
 <Button-1> Set the insert point, clear the selection, set focus.
 <B1-Motion> Sweep out a selection from insert point.
@@ -3466,6 +3540,8 @@ proc tcl_abc_edit_menu_bar {abcfile} {
     $w.tools.type add cascade -label "replace chords" -menu $w.tools.replacechords\
             -font $df
     $w.tools.type add cascade -label "x replace chords" -menu $w.tools.xreplacechords\
+            -font $df
+    $w.tools.type add command -label "add guitar chords" -command put_guitar_chords \
             -font $df
     $w.tools.type add command -label "solfege vocalization" -command solfege_vocalization \
             -font $df
@@ -7086,8 +7162,7 @@ set hlp_overview "You are running runabc.tcl version $runabc_version $runabc_dat
         Quit		Will write the runabc.ini to disk and exit the program.\n\n\
         Play selection	Will run abc2midi on the selected tune and play the resulting \
         midi file.\n\n\
-        Display		Will run abc2ps on the selected tune and display the output \
-        PostScript file.\n\n\
+        Display		Will run abc2ps on the selected tune and display the output. \n\n\
         Edit/menu	Will allow you to edit the selected tune and save only this tune \
         in a separate  file.\n\n\
         Console		Will display any error messages originating from abc2ps or \
@@ -7099,16 +7174,11 @@ set hlp_overview "You are running runabc.tcl version $runabc_version $runabc_dat
         to appear. Click the same button again to remove that sheet. \
         Clicking a different button will bring up a different property page. \
         There are two possible property pages associated with the 'postscript' \
-        button. The appropriate page will displayed depending on whether abc2ps \
+        button. The appropriate page will be displayed depending on whether abc2ps \
         or yaps was selected in the 'config' property page. \
         Click the help button for further instructions when \
         one of these property pages is in view.\n\n
 
-Three scale controls (sliders) in dark red appear below the buttons.\
-        The right most scale, is used to vary the tempo (in beats per minute)\
-        of the tune to be played. The other scales allow you to play or display\
-        a section from the tune given the starting and ending bar numbers.\
-        This is useful when you are editing a new tune.\n\n
 Other bindings\n\n
 The arrow, page up/down, home, end keys allow you to scroll up and\
         down the table of contents. The <cntl>-slash and <cntl>-backslash allow\
@@ -7116,10 +7186,14 @@ The arrow, page up/down, home, end keys allow you to scroll up and\
         The p key  or <space> will play the current selection and the d key will \
         display this selection. The E key will edit the file; the e key will\
         start up TclAbcEditor.\n\n\
-        
 
-Seymour.Shlien@crc.ca, 624 Courtenay Ave,  Ottawa, K2A 3B5, Canada, \
-        Sept 9 2001."
+If your browser supports auto-reload (eg firefox with an addon) then you can\
+right click on the print button and a new copy of the browser will not\
+be called. Instead the current displayed music will be replaced in the\
+browser. This applies only to abcm2ps with xhtml or svg output.
+
+
+Seymour.Shlien  fy733@ncf.ca Sept 9 2001."
 
 
 set hlp_config_1 "Configuration Property Sheet\n\n\This page is\
@@ -7219,6 +7293,12 @@ set hlp_config_3 "Font Selector\n\n\
         I use the fixed font."
 
 set hlp_cfg "Other configuration items\n\n\
+use ps header: if checked all the postscript commands beginning with %%\
+occurring in the beginning of abc file (before the first X:)\
+will be inserted in the selected tune before it is displayed.\n
+use midi header: if checked all the midi commands beginning with %%MIDI\
+occurring in the beginning of the abc file (before the first X:)\
+will be inserted in the selected tune before it is played.\n
 greetings: shows the start up message you see the first time you run runabc.tcl\
 i.e. (runabc.ini is missing). The message may report potential problems.\n
 sanity check: checks the for the presence of all helper programs (eg. abc2midi)\
@@ -8678,7 +8758,7 @@ proc match_window {headtype} {
     global hlp_match_bars hlp_match_tune
     set f .matcher.top
     if {![winfo exist .matcher]} {
-           if {[check_abcmatch_version 1.60] == 0} return
+           if {[check_abcmatch_version 1.67] == 0} return
            setup_match_window}
     foreach w [winfo children $f] {pack forget $w}
     foreach w [winfo children $f.con] {pack forget $w}
@@ -9799,13 +9879,13 @@ set hlp_grouper \
 bind . <Alt-s> {runabc_diagnostic}
 bind . <Alt-S> {runabc_diagnostic}
 
-set abcmidilist {path_abc2midi 3.10\
-            path_abc2abc 1.73\
-            path_yaps 1.54\
-            path_midi2abc 2.92\
-            path_midicopy 1.19\
-            path_abcmatch 1.60\
-            path_abcm2ps 8.5.1}
+set abcmidilist {path_abc2midi 3.79\
+            path_abc2abc 1.81\
+            path_yaps 1.62\
+            path_midi2abc 2.97\
+            path_midicopy 1.20\
+            path_abcmatch 1.67\
+            path_abcm2ps 8.8.1}
 global abcmidilist
 
 proc runabc_diagnostic {} {
@@ -11024,6 +11104,7 @@ proc midi_file_browser {} {
         .midi2abc.file.fileinent xview moveto 1.0
     }
     disable_playabc
+    return $midi(midifilein)
 }
 
 proc midi2abc {} {
@@ -11091,11 +11172,11 @@ proc play_generated_abc {} {
     if {$midi(player)} {
         # player 2
         set cmd "exec [list $midi(alt_path_midiplay)] $midi(alt_midi_options) "
-        set cmd [concat $cmd [file join [pwd] tmp.mid]
+        set cmd [concat $cmd [file join [pwd] tmp.mid]]
     } else {
         # player 1
         set cmd "exec [list $midi(path_midiplay)] $midi(midiplay_options) "
-        set cmd [concat $cmd [file join [pwd] tmp.mid]
+        set cmd [concat $cmd [file join [pwd] tmp.mid]]
     }
     set cmd [concat $cmd &]
     catch {eval $cmd} exec_out
@@ -11630,6 +11711,8 @@ proc piano_window {} {
             -command create_abc_file_and_display
     $p.action.items add command  -label "play abc" -font $df \
             -command create_abc_file_and_play
+    $p.action.items add command -label "mftext" -font $df \
+            -command mftext_tmp_midi
     $p.action.items add command  -label "velocity distribution" -font $df \
             -command {pianoroll_statistics velocity
                 plotmidi_velocity_or_pitch_distribution velocity}
@@ -11800,6 +11883,7 @@ set hlp_midishow_actions "The action menu provides miscellaneous\
         display abc  - does the above but also displays the new abc file.\n\n\
         play abc     - does the above but also plays the new abc file.\n\n\
         create midi  - creates tmp.mid and renames it to whatever you select.\n\n\
+        mftext  -  creates tmp.mid and displays the midi file in mftext form.\n\n\
         velocity distribution - produces a histogram of the velocity values\
         of the notes in the exposed area.\n\n\
         pitch distribution - produces both a histogram of the MIDI pitch values\
@@ -12286,22 +12370,29 @@ proc midi_to_midi {sel} {
     set begin [lindex $midipulse_limits 0]
     set end   [lindex $midipulse_limits 1]
     
+    set tsel 0
     if {$sel} {
-        set tsel 0
         #always include track 1 because it contains the tempo and other stuff
-        set trkstr "1"
+        if {$midi(midishow_sep) == "track"} {set trkstr "1"
+            set tsel 1
+            } else {
+            set trkstr ""
+            set tsel 0
+           }
         for {set i 0} {$i <32} {incr i} {
             if {$trksel($i)} {
+                if {$tsel > 0} {
+                    set trkstr $trkstr,$i
+                    } else {
+                    set trkstr $i
+                    }
                 incr tsel
-                set trkstr $trkstr,$i
             }
         }
-        
-        
-        
-    } {
-        set tsel 0
     }
+        
+        
+        
     
     # create tmp.mid file
     # Alway include track 1 since it includes tempo info.
@@ -12415,6 +12506,8 @@ proc create_abc_file {} {
     global midi df midi2abc_options
     global ppqn
     global exec_out
+    global ps_numb_start
+    set ps_numb_start 0
     midi_to_midi 1
     if {[winfo exist .ppqn]} {
         set midi(unitval) [expr $ppqn/2]
@@ -12455,6 +12548,13 @@ proc create_abc_and_midi {} {
     set filename [tk_getSaveFile -initialdir $filedir -filetypes $miditype]
     file rename -force tmp.mid $filename
     set exec_out "$exec_out\nand renamed to $filename"
+}
+
+proc mftext_tmp_midi {} {
+    global midi
+    midi_to_midi 1
+    set cmd "exec [list $midi(path_midi2abc)] tmp.mid -mftext"
+    mftextwindow tmp.mid 1
 }
 
 
@@ -13648,25 +13748,26 @@ set hlp_associate "For Windows only -- associate abc files with runabc\n\n\
 
 #source mftextwin.tcl
 
-proc mftextwindow {} {
+proc mftextwindow {midifilein nofile} {
     global midi df
     global mfnotes mftouch mfcntl mfprog mfmeta
     set f .mftext
     if {[winfo exist $f] == 0} {
         toplevel $f
         frame $f.1
-        entry $f.1.filent -text midi(midifilein) -font $df -width 30
-        $f.1.filent xview moveto 1.0
-        button $f.1.browse -text browse -font $df -command {midi_file_browser
-            .mftext.1.filent xview moveto 1.0
-            output_mftext}
+        entry $f.1.filent -textvariable midi(midifilein)  -font $df -width 30
+        button $f.1.browse -text browse -font $df -command {
+                 midi_file_browser
+                 set midifilein $midi(midifilein)
+                 output_mftext [list $midi(midifilein)]
+                 }
         button $f.1.help -text help -font $df\
                 -command {show_message_page $hlp_mftext word}
         pack $f.1.filent $f.1.browse $f.1.help -side left
         frame $f.2
         pack $f.1 $f.2 -side top
         bind .mftext.1.filent <Return> {focus .mftext.1
-            output_mftext}
+            output_mftext $midi(midifilein)}
         set f .mftext.4
         frame $f
         label $f.lab -text hide -font $df
@@ -13688,11 +13789,17 @@ proc mftextwindow {} {
         pack $f.lab $f.note $f.touch $f.prog $f.meta $f.cntl -side left
         pack $f -side top -anchor w
     }
-    output_mftext
+    if {$nofile} {
+       pack forget .mftext.1
+       } else {
+       pack .mftext.1 -before .mftext.2 
+       .mftext.1.filent xview moveto 1.0
+       }
+    output_mftext [list $midifilein]
 }
 
 
-proc output_mftext {} {
+proc output_mftext {midifilein} {
     global midi exec_out
     global df elidetrk
     global mfnotes mftouch mfcntl mfprog mfmeta
@@ -13718,7 +13825,7 @@ proc output_mftext {} {
     pack .mftext.3 -side top -anchor w
     pack .mftext.31 -side top -anchor w
     set f .mftext.2.txt
-    set cmd "exec [list $midi(path_midi2abc)] [list $midi(midifilein)] -mftext"
+    set cmd "exec [list $midi(path_midi2abc)] $midifilein -mftext"
     catch {eval $cmd} mftextresults
     set exec_out $mftextresults
     if {[string first "no such" $exec_out] >= 0} {abcmidi_no_such_error $midi(path_midi2abc)}
@@ -20143,36 +20250,93 @@ proc load_whole_file {filename} {
     close $inhandle
     }
 
+proc search_backwards_for_xref {loc xref} {
+    global wholefile
+    set actualref -1
+    incr loc -1
+    set k 0
+    while {($loc >= 0) && ($actualref != $xref) && ($k < 5)} {
+      set loc [string last "X:" $wholefile $loc]
+      set value [string range $wholefile $loc [expr $loc + 10]]
+      set match [scan $value "X:%d" actualref]
+      if {$actualref == $xref} {return $loc}
+      incr k
+      }
+    }
 
-proc load_tune {from} {
+proc load_tune {from xref} {
      global wholefile
+     global midi
      # should see X: command here
+     set actualref -1
      set xloc [string first "X:" $wholefile $from]
-     #puts "xloc = $xloc from = $from"
+     set value  [string range $wholefile $xloc [expr $xloc + 10]]
+     set match [scan $value "X:%d"  actualref]
+     #puts "load_tune xloc, value = $xloc $value"
+     #puts "actualref = $actualref"
+     
+     # may not match because of presence of foreign characters  2015-10-22
+     if {$actualref != $xref} {
+       set xloc [search_backwards_for_xref $from $xref]
+       }
+     #puts "load_tune: xloc = $xloc from = $from"
+     #puts "xref = $xref"
      # if there is a header before the first X: it is possible
      # that from does not point to the start of the tune.
      if {$xloc != $from} {set from $xloc}
      set lastchar [string first "X:" $wholefile [expr $from + 1]]
      if {$lastchar > 0} {
-        return [string range $wholefile $from [expr $lastchar -1]]
+        set tune [string range $wholefile $from [expr $lastchar -1]]
         } else {
-        return [string range $wholefile $from end]
+        set tune [string range $wholefile $from end]
         }
+     return $tune
      }
+
+proc insert_ps_header {tune} {
+     # copies ps_header after the X:1 line
+     global ps_header
+     # replace \n after X:n with \n$ps_header
+     set eol [string first "\n" $tune 2]
+     if {[string length $ps_header] > 0 } {
+       set tune [string replace $tune $eol $eol \n$ps_header]
+       }
+     return $tune
+     }
+
 
 proc update_musicscore {tunecontent} {
     global midi
     global cmn
     global npgms
-    catch {exec  [list $midi(path_abcm2ps)] - << $tunecontent} result
-    #puts $result
+    global midi
+    global psheader_lines
+    global ps_header
+    global exec_out
+    global pgmindex npgms
+    if {$midi(use_ps_header)} {
+        set atunecontent [insert_ps_header $tunecontent]
+        set psheader_lines [countlines_in $ps_header]
+        #puts "psheader_lines = $psheader_lines"
+        #puts "atunecontent =\n$atunecontent"
+
+    } else {
+        set psheader_lines 0
+        set atunecontent $tunecontent}
+    set exec_out "exec [list $midi(path_abcm2ps)] - -A -s $midi(livescale)   << ..."
+    catch {exec  [list $midi(path_abcm2ps)] - -A -s $midi(livescale)  << $atunecontent} result
+    append exec_out "\n$result"
     set cmd "file delete [glob -nocomplain *.pgm]"
     catch {eval $cmd}
     set cmd "exec [list $midi(path_gs)] -dBATCH -dNOPAUSE -sDEVICE=pgmraw -q -sOutputFile=out%d.pgm Out.ps "
     catch {eval $cmd} result2
-    set npgms [llength [glob *.pgm]]
-    $cmn read out1.pgm
-    set pgmindex 1
+    append exec_out "\n$result2"
+    set cmd "glob *.pgm"
+    catch {eval $cmd} result
+    if {[string first "no files" $result] == 0} {
+         return } else {
+         set npgms [llength $result]}
+    $cmn read out$pgmindex.pgm
     .live.right.header.middle configure -text "1/$npgms"
 }
 
@@ -20190,9 +20354,10 @@ proc extract_notes_from_ps {} {
     # This procedure is customized to read the Out.ps file
     # produced by abcm2ps and extract the coordinates of 
     # the note heads.
-    global objectlist psscale
+    global objectlist psscale objectpage
 
     set psscale 0.75
+    array unset objectpage
 
     set inhandle  [open "Out.ps" r ]
 
@@ -20241,6 +20406,7 @@ proc extract_notes_from_ps {} {
              set xp [expr round($psscale*($px + $xtrans))]
              #puts "$row $col $x $y $xp $yp"
              lappend objectlist($p) [list $xp $yp $row $col]
+             if {[info exist arrayobject($row)] == 0} {set objectpage($row) $p}
             }
         if {[string length $line] < 13 && [string last "T" $line] > 5} {
             if {[string first "pop" $line] >= 0} continue
@@ -20257,7 +20423,8 @@ proc extract_notes_from_ps {} {
 # live editor support functions
 
 proc closest_note_in_list {x y page} {
-global objectlist
+global objectlist 
+global psheader_lines
 set nobject [llength $objectlist($page)]
 set min_d 2000
 set min_i -1
@@ -20274,6 +20441,9 @@ if {$min_d < 150} {
     set obj [lindex $objectlist($page) $min_i]
     set r [lindex $obj 2]
     set c [lindex $obj 3]
+    # in case ps_header is imported and not expressed
+    # in the editor window frame
+    set r [expr $r - $psheader_lines]
     focus .live.right.editor.t
    .live.right.editor.t mark set insert $r.$c
    .live.right.editor.t  see $r.$c
@@ -20282,6 +20452,50 @@ if {$min_d < 150} {
 
 return ""
 }
+
+proc closest_note_object {loc} {
+# finds the note in the music canvas corresponding to the
+# note at position loc in the editor and highlights that note
+# with a red rectangle.
+global objectlist objectpage
+global pgmindex
+global psheader_lines
+set  loclist [split $loc .]
+set row [lindex $loclist 0]
+set col [lindex $loclist 1]
+# in case we have imported the ps_header
+set row [expr $row + $psheader_lines ]
+#puts [array get objectpage]
+#puts "row col = $row $col"
+if {[info exist objectpage($row)] == 0} return
+set page $objectpage($row)
+if {$page != $pgmindex} {
+      set pgmindex $page
+      show_pgmfile
+      }
+set nobject [llength $objectlist($page)]
+for {set i 0} {$i < $nobject} {incr i} {
+    set obj [lindex $objectlist($page) $i]
+    set r [lindex $obj 2]
+    set c [lindex $obj 3]
+    if {$r != $row} continue
+    if {$c >= $col} {
+        set ix1 [lindex $obj 0]
+        set iy1 [lindex $obj 1]
+        set ix2 [expr $ix1 + 5]
+        set iy2 [expr $iy1 + 5]
+        .live.right.music.c  create rect $ix1 $iy1 $ix2 $iy2 -tag pos -outline red -width 2
+        set vfract [.live.right.music.c yview]
+        set vtop [expr [lindex $vfract 0] * 796.0]
+        set vbot [expr [lindex $vfract 1] * 796.0]
+        if {$iy1 < $vtop || $iy1 > $vbot} {
+            set fraction [expr ($iy2 - 100) /796.0]
+            .live.right.music.c yview moveto $fraction
+            }
+        break}
+    } 
+}
+    
 
 
 # live editor support functions
@@ -20307,8 +20521,6 @@ foreach obj $objectlist($page) {
 proc shift_pgmfile {pgmdir} {
 global pgmindex
 global npgms
-global cmn
-global midi
 switch $pgmdir {
   -2 {set pgmindex $npgms}
   2  {set pgmindex 1}
@@ -20319,10 +20531,19 @@ switch $pgmdir {
       if {$pgmindex < 1} {set pgmindex 1}
      }
   }
+show_pgmfile 
+}
+
+proc show_pgmfile {} {
+global cmn
+global midi
+global npgms
+global pgmindex
 $cmn read out$pgmindex.pgm
 if {$midi(livehotspots)} {show_objects $pgmindex} 
 .live.right.header.middle configure -text "$pgmindex/$npgms"
 }
+
 
 proc live_scale {scalefac} {
 global midi
@@ -20331,6 +20552,22 @@ set midi(livescale) $scalefac
 update_musicscore $tunecontent
 }
 
+set hlp_live_editor \
+    "Live Editor\n\n\
+     The live editor is activated (or deactivated) from the options menu (wrench icon).\
+     It is a 'live editor' in the sense that any edits will immediately change\
+     the music representation in the top window frame. Furthermore, the open abc file\
+     will be updated automatically whenever you play or display a tune or select\
+     a different tune in\
+     the TOC.\n\n\
+     If you click on a note in the music window, a cursor will be placed at the corresponding\
+     note in the editor. If you hold the left alt button down while the editor is in focus,\
+     the corresponding note in the music window will be highlighted in red.\n\n\
+     This feature may not work correctly if the PostScript header block\
+     appearing before the first X: reference command is imported and\
+     modifies the scale factor. (You may need to untick the option\
+     'use ps header' in the options menu.)
+     "
 
 proc create_live_editor {} {
 global cmn
@@ -20341,7 +20578,16 @@ if {[string length $midi(path_gs)] < 2} {
    messages "You need to go to options/settings and set the path to ghostscript and then restart runabc. (On Windows find gswin32c or gswin64c.) If you do not want to install ghostscript and see this message, go to options and untick activate live editor."
    return
    }
-toplevel .live 
+
+set topgeometry [split [wm geometry .] "x+"]
+set livehpos [expr [lindex $topgeometry 0] + [lindex $topgeometry 2] + 70]
+set livevpos [lindex $topgeometry 3]
+set livepos [format "%d+%d" $livehpos $livevpos]
+
+toplevel .live
+
+
+
 panedwindow .live.right -orient vertical -sashwidth 8 
 pack .live.right -expand 1 -fill both
 frame .live.right.header
@@ -20370,9 +20616,10 @@ $wmenu2 add radiobutton -label "0.85" -command "live_scale 0.85"
 $wmenu2 add radiobutton -label "0.90" -command "live_scale 0.90"
 $wmenu2 add radiobutton -label "0.95" -command "live_scale 0.95"
 
+button $head.help -text "help" -command {show_message_page $hlp_live_editor word}
 
 
-pack $head.lleft $head.left $head.middle $head.right $head.rright $head.coord $head.livemenu -side left
+pack $head.lleft $head.left $head.middle $head.right $head.rright $head.coord $head.livemenu $head.help -side left
 
 canvas .live.right.music.c -width 616 -height 300 -scrollregion {0 0 616 796} -yscrollcommand ".live.right.music.vscroll set"
 scrollbar .live.right.music.vscroll -command ".live.right.music.c yview"
@@ -20390,49 +20637,70 @@ pack .live.right.editor.ysbar -side right -fill y -expand 0
 pack .live.right.editor.xsbar -side bottom -fill x
 pack .live.right.editor.t -side left -anchor w -fill both -expand 1
 
-bind .live.right.editor.t <KeyRelease> {
-    set tunecontent [.live.right.editor.t get 1.0 end]
-    update_musicscore $tunecontent
+
+bind .live.right.editor.t <KeyPress> {
+    if {"%K" == "Alt_L"} { 
+        set loc [.live.right.editor.t index insert]
+        closest_note_object $loc 
+        }
     }
 
-bind .live.right.music.c <Button> {button_press %x %y}   
+bind .live.right.editor.t <KeyRelease> {
+    if {"%K" == "Alt_L"} { 
+        set loc [.live.right.editor.t index insert]
+        .live.right.music.c  delete -tag pos
+        } elseif {"%K" == "Right" || "%K" == "Left" ||
+                  "%K" == "Up" || "%K" == "Down"} {
+            continue} else {
+        #.live.right.editor.t mark set insert $r.$c
+        set tunecontent [.live.right.editor.t get 1.0 end]
+        update_musicscore $tunecontent
+        }
+    }
+
+bind .live.right.music.c <Button> {button_press %x %y }   
 
 set cmn [image create photo]
 wm protocol .live WM_DELETE_WINDOW {destroy .live}
-#puts [wm geometry .live]
+
+tkwait visibility .live
+set livegeometry [split [wm geometry .live] "+"]
+set livegeom [format "%s+%s" [lindex $livegeometry 0] $livepos]
+wm geometry .live $livegeom
 }
 
+
+
+proc countlines_in {string} {
+        set rc [llength [split $string "\n"]] 
+        incr rc -1
+        return $rc
+ }
 
  
 
 
-proc update_live_editor {loc} {
+proc update_live_editor {loc xref} {
     # returns end position of tune in wholefile
     global midi cmn
     global npgms
     global pgmindex
     global exec_out
     global tunecontent
-    set s $midi(livescale)
-    set tunecontent [load_tune $loc]
-    set exec_out "exec [list $midi(path_abcm2ps)] - -A -s $s   << ..."
-    catch {exec  [list $midi(path_abcm2ps)] - -A -s $s  << $tunecontent} result
-    #puts $result
-    append exec_out "\n$result"
-    set cmd "file delete [glob -nocomplain *.pgm]"
-    catch {eval $cmd}
-    set cmd "exec [list $midi(path_gs)] -dBATCH -dNOPAUSE -sDEVICE=pgmraw -q -sOutputFile=out%d.pgm Out.ps "
-    append exec_out "\n$cmd"
-    catch {eval $cmd} result2
-    #puts "result2 = $result2"
-    append exec_out "\n$result2"
-    set npgms [llength [glob *.pgm]]
-    $cmn read out1.pgm
-    .live.right.header.middle configure -text "1/$npgms"
+    global ps_header
+    global psheader_lines
+
+    set tunecontent [load_tune $loc $xref]
     set pgmindex 1
-    #puts [image height $cmn ]
-    #puts [image width $cmn ]
+    update_musicscore $tunecontent
+
+
+
     .live.right.music.c create image 0 0 -anchor nw -image $cmn
+     # restore scroll view
+    .live.right.music.c yview moveto 0.0
+
+
     .live.right.editor.t delete 1.0 end
     .live.right.editor.t insert 1.0 $tunecontent 
     extract_notes_from_ps 
@@ -20459,10 +20727,424 @@ proc toggle_hotspots {} {
         }
     }
 
-#create_live_editor
 switch_live_editor 
 
 # End of Live Editor Functions
+
+
+# Begin Put Guitar Chords
+
+proc put_guitar_chords {} {
+global fieldtext bodytext
+global abctxtw
+
+
+set tunestring [$abctxtw get 0.0 end]
+add_guitar_chords_to_tune $tunestring
+
+# output
+set output_text $fieldtext
+$abctxtw delete 1.0 end
+$abctxtw insert end $fieldtext 
+$abctxtw insert end $bodytext
+tag_text
+}
+
+proc gc_process_line {line} {
+# processes the notes in a single line of the body in sequence.
+# We only care about the duration of the note and position of
+# the guitar chord indications. Thus we need to recognize
+# barlines eg. | || :| |: |[1 |[2
+# chords eg. [CEG]
+# triplets eg. (3CDD
+# gchords (anything enclosed by double quotes)
+# notes eg. A3/2 A/ A3 A
+# Each of these entities are handled by different functions.
+#set barpat {\||:\|\[\d|:\||\|:|\|\[\d|\||::}
+set barpat {\|\||\|[0-9]?|:\|\[\d|:\|[0-9]?|:\||\|:|\|\[\d|\||::}
+set notepat {(~?)(\^*|_*|=?)([A-G]\,*|[a-g]\'*|z)(/?[0-9]*|[0-9]*/*[0-9]*)}
+set gchordpat {\"[^\"]+\"}
+set curlypat {\{[^\}]*\}}
+set chordpat {\[[^\]\[]*\]}
+set instructpat {![^!]*!}
+set tripletpat {\(3}
+set sectpat {\[[0-9]+}
+
+global bar_accumulator
+global bodytext
+global preservegchord
+global beatsize
+
+set lastguitarchord ""
+set beatposition 0
+# remove existing gchords if any
+regsub -all  {"[^"]*"} $line "" result
+set line $result
+
+# scan through the whole line (including gchords)
+set i 0
+while {$i < [string length $line]} {
+# search for bar lines
+ set success [regexp -indices -start $i $barpat $line location]
+ if {$success} {
+   set loc1  [lindex $location 0]
+   set loc2  [lindex $location 1]
+   if {$loc1 == $i} {
+     gc_process_barline 
+     set i [expr $loc2+1]
+     set beatposition $loc2
+     continue}
+   }
+
+# for repeat sections
+ set success [regexp -indices -start $i $sectpat $line location]
+ if {$success} {
+   set loc1  [lindex $location 0]
+   set loc2  [lindex $location 1]
+   if {$loc1 == $i} {
+     set sect [string range $line $loc1 $loc2]
+     set i [expr $loc2+1]
+     continue
+     }
+  }
+
+
+
+ set success [regexp -indices -start $i $curlypat $line location]
+# search for grace note sequences
+  if {$success} {
+   set loc1  [lindex $location 0]
+   set loc2  [lindex $location 1]
+#  ignore grace notes in curly brackets
+   if {$loc1 == $i} {
+     set i [expr $loc2+1]
+     continue}
+   }
+
+
+ set success [regexp -indices -start $i $tripletpat $line location]
+# search for triplet indication
+  if {$success} {
+   set loc1  [lindex $location 0]
+   set loc2  [lindex $location 1]
+   if {$loc1 == $i} {gc_process_triplet
+     set i [expr $loc2+1]
+     continue}
+   }
+
+ set success [regexp -indices -start $i $instructpat $line location]
+# search for embedded instructions like !fff!
+  if {$success} {
+   set loc1  [lindex $location 0]
+   set loc2  [lindex $location 1]
+   if {$loc1 == $i} {
+#    skip !fff! and similar instructions embedded in body
+     set i [expr $loc2+1]
+     continue}
+   }
+
+ set success [regexp -indices -start $i $notepat $line location]
+# search for notes
+ if {$success} {
+   set loc1  [lindex $location 0]
+   set loc2  [lindex $location 1]
+   if {$loc1 == $i} {
+     #puts "[string range $line $loc1 $loc2] $loc1 $loc2 $beatposition"
+     gc_process_note [string range $line $loc1 $loc2]
+     if {$bar_accumulator >= $beatsize} {
+        set matchinfo [best_chord_match] 
+        #puts "matchinfo = $matchinfo"
+        set guitarchord [lindex $matchinfo 0]
+        if {$guitarchord != 0 && [string equal $guitarchord $lastguitarchord] != 1} {
+           if {$beatposition == 0} {
+                set line \"$guitarchord\"$line
+              } else {
+                set original [string index $line $beatposition]
+                set outguitarchord $original\"$guitarchord\"
+                set line [string replace $line $beatposition $beatposition $outguitarchord]
+              }
+           #puts $line
+           set beatposition [expr $loc2 + [string length $guitarchord]]
+           set i [expr $loc2+ [string length $guitarchord]]
+           set lastguitarchord $guitarchord
+           }
+        reset_pitcharray}   else {
+        #read stdin 1
+        set i $loc2
+        }
+     }
+ }
+
+ set success [regexp -indices -start $i $chordpat $line location]
+# search for chords
+  if {$success} {
+   set loc1  [lindex $location 0]
+   set loc2  [lindex $location 1]
+   if {$loc1 == $i} {process_chord [string range $line $loc1 $loc2] $line $loc2
+     set i [expr $loc2+1]
+     continue}
+     }
+
+ incr i
+ }
+#puts $line
+set bodytext $bodytext$line\n
+}
+
+
+
+
+# set flag to adjust the duration of the next three notes
+proc gc_process_triplet {} {
+global triplet_running
+set triplet_running 1
+}
+
+# determine the duration of the note. We ignore broken
+# notes (eg A > C) because the two notes usually complete
+# a beat. We also do not need to pay attention to tied
+# notes.
+proc gc_process_note {token} {
+  global bar_accumulator
+  global noteunits
+  global triplet_running
+  global pitcharray 
+
+  set durpatf {([0-9])\/([0-9])}
+  set durpatn {[0-9]}
+  set durpatd {\/([0-9])}
+  set dur2 {/+}
+  set pitchpat {([A-G]\,*|[a-g]\'*|z)}
+  regexp $pitchpat $token match pitchval
+  set pitchval [string toupper $pitchval]
+  if {[regexp $durpatf $token match val1 val2]} {
+     set increment  [expr $noteunits*$val1/$val2]
+    } elseif {
+  [regexp $durpatd $token val1 val2]} {
+     set increment  [expr $noteunits/$val2]
+     } elseif {
+ [regexp $durpatn $token val]} {
+     set increment  [expr $noteunits*$val]
+    } elseif {
+  [regexp $dur2 $token val]} {
+     set increment  [expr $noteunits/2]
+     } else {
+  set increment $noteunits
+  }
+  if {$triplet_running} {
+     set increment [expr 2 * $increment/3]
+     incr triplet_running
+     if {$triplet_running > 3} {set triplet_running 0}
+     }
+  incr bar_accumulator $increment
+  #puts "$token $pitchval $bar_accumulator $increment $pitchval"
+  incr pitcharray($pitchval) $increment
+  return 
+ }
+
+
+# We hope all the notes in the chord are of equal.
+# We get the time value of the chord from the time
+# value of the first note in the chord.
+proc process_chord {token line loc} {
+  #set line [gc_process_note $token]
+  }
+
+
+# This is the function which processes the tune.
+# Assume only one tune per file.
+proc add_guitar_chords_to_tune {tunestring} {
+ global bar_accumulator
+ global bar_number
+ global triplet_running
+ global body
+ global debug
+ global pitcharray
+ global fieldtext bodytext
+ 
+ set fieldtext ""
+ set bodytext ""
+
+ array set pitcharray {A 0 B 0 C 0 D 0 E 0 F 0 G 0}
+ set fieldpat {^X:|^T:|^C:|^O:|^A:|^Q:|^Z:|^N:|^H:|^S:}
+ set triplet_running 0
+ set body 0
+ set bar_number 0
+ foreach line [split $tunestring \n] {
+   if {[string length $line] < 1} continue
+   if {[string index $line 0] == "%"} {
+      appendtext $line
+      continue
+      } elseif {
+   [regexp $fieldpat $line] } {
+      appendtext $line
+      } elseif {
+   [string first "K:" $line] == 0} {
+       appendtext $line
+       set kfield [string range $line 2 end]
+       gc_setup_key $kfield
+       set bar_accumulator 0
+       if {!$body} {
+         set body 1
+         }
+      } elseif {
+   [string first "M:" $line] == 0} {
+       appendtext $line
+       gc_setup_meter $line
+        } elseif {
+   [string first "L:" $line] == 0} {
+       appendtext $line
+       gc_setup_unitlength $line
+      } elseif {$body} {
+       gc_process_line $line
+   } else {appendtext $line}
+ }
+}
+
+
+# gc_setup_meter {line}
+# Handles M: command
+proc gc_setup_meter {line} {
+  global default_gchord
+  global gchordstring
+  global barunits
+  global noteunits beatsize
+  if {[string first "C|" $line] >= 0} {
+    set m1 2
+    set m2 2} elseif {
+      [string first "C" $line] >= 0} {
+    set m1 4
+    set m2 4} else {
+    set r [scan $line "M:%d/%d" m1 m2]}
+  set barunits [expr 96 * $m1 /$m2]
+  set meter $m1/$m2
+
+  if {[info exists noteunits]} return
+  if {[expr double($m1)/$m2] < 0.75} {
+    gc_setup_unitlength L:1/16} else {
+    gc_setup_unitlength L:1/8}
+
+  if {$m1 == 2 || $m1 == 4} {
+       set beatsize 24 
+     } else {
+       set beatsize 36}
+
+ #
+ # one beat per bar
+ set beatsize $barunits
+ #
+  }
+
+#Handles L: command
+proc gc_setup_unitlength {line} {
+  global noteunits
+  set r [scan $line "L:%d/%d" m1 m2]
+  set noteunits [expr 96 * $m1 /$m2]
+  }
+
+array set preferredchords {maj {I IV V} min {i iv VII} dor {i ii IV} phr {i II vii} mix {I v VII}}
+array set roman2arabic {I 1 II 2 III 3 IV 4 V 5 VI 6 VII 7}
+set fullnotekey "CDEFGABCDEFGABCDEFGABC"
+
+proc gc_setup_key {keysig} {
+# Given the key signature, the function returns a list of the
+# preferred guitar chords to use (chords_for_key). The array
+# chords_spelled() spells out the notes for each of the preferred
+# guitar chord. The function recognizes the common modes (eg.
+# minor, major, dorian etc.)
+
+  global preferredchords roman2arabic fullnotekey
+  global keymap
+  global  chords_for_key chords_spelled
+  set sf [keytosf $keysig]
+  setkeymap $sf
+  set s [regexp {([A-G]|none)(#*|b*)(.*)} $keysig match key sub2 mode]
+  if {$s < 1} {puts "can't understand key signature $keysig"
+        return}
+  if {[string compare $key "none"] == 0} {set key C}
+  set key $key$sub2
+  #puts "key = $key"
+  if {$mode == ""} {set mode "maj"}
+  if {$mode == "m"} {set mode "min"}
+  puts "key mode = $key $mode" 
+  # eliminate sharp or flat if present
+  set key [string index $key 0]
+  set loc [string first $key $fullnotekey]
+  set usechords $preferredchords($mode)
+  #puts "usechords = $usechords"
+  set chords_for_key ""
+  foreach gchord $usechords {
+      set majmin ""
+      if {[string is lower $gchord]} {set majmin "m"}
+      set g [string toupper $gchord]
+      set g $roman2arabic($g)
+      # convert to guitar chord
+      set gc [string index $fullnotekey [expr $loc - 1 + $g]]
+      set gc $keymap($gc) 
+      #puts "gc = $gc"
+      set chords_spelled($gc$majmin) $gc
+      lappend chords_spelled($gc$majmin)  [string index $fullnotekey [expr $loc +1 +  $g]] 
+      lappend chords_spelled($gc$majmin) [string index $fullnotekey [expr $loc +3  + $g]] 
+      #puts "$gc$majmin $chords_spelled($gc$majmin)"
+      lappend chords_for_key $gc$majmin
+      }
+  }
+
+
+proc print_pitcharray {} {
+global pitcharray
+foreach c {A B C D E F G} {
+ puts -nonewline "$pitcharray($c) "
+ }
+puts -nonewline "  "
+}
+
+
+proc gc_process_barline {} {
+  global bar_accumulator
+  global bar_number
+  set bar_accumulator 0
+  incr bar_number
+  }
+
+proc reset_pitcharray {} {
+  # The pitcharray counts the number of times a particular note
+  # appears inside a bar (or beat).
+  global bar_accumulator
+  global pitcharray
+  #print_pitcharray
+  array set pitcharray {A 0 B 0 C 0 D 0 E 0 F 0 G 0}
+  set bar_accumulator 0
+  }
+
+proc match_pitcharray_with_gchord {chord} {
+# The function determines how many notes in the bar match
+# the pattern of notes for a given guitar chord.
+global pitcharray
+set match 0
+foreach note $chord {
+    # remove flat/sharp if any
+    set note [string index $note 0]
+    incr match $pitcharray($note)
+    }
+return $match
+}
+
+proc best_chord_match {} {
+# The function returns the guitar chord which best fits the
+# notes in the bar (or beat).
+global chords_for_key chords_spelled
+set largestmatchval 0
+set bestchord ""
+foreach chord $chords_for_key {
+    set match [match_pitcharray_with_gchord $chords_spelled($chord)]
+    if {$match > $largestmatchval} {set largestmatchval $match
+                                    set bestchord $chord}
+    }
+return "$bestchord $largestmatchval"
+}
+
+# End Put Guitar Chords
 
 
 
