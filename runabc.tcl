@@ -33,8 +33,8 @@ exec wish8.5 "$0" "$@"
 #      http://ifdo.pugmarks.com/~seymour/runabc/top.html
 
 
-set runabc_version 1.970
-set runabc_date "(December 10 2015 10:30)"
+set runabc_version 1.979
+set runabc_date "(December 27 2015 11:00)"
 set tcl_version [info tclversion]
 set startload [clock clicks -milliseconds]
 #lappend auto_path /usr/share/tcltk/tk8.5
@@ -94,6 +94,7 @@ if {[catch {package require Ttk} error]} {
 # Part 38.0               Mode Recognition
 # Part 39.0               Advanced abcm2ps support
 # Part 40.0               Live Editor
+# Part 41.0               Generate Guitar Chords
 
 
 
@@ -912,8 +913,8 @@ proc midi_init {} {
     # grace notes
     set midi(grname1) cut
     set midi(grname2) strike
-    set midi(grname3) mordnt
-    set midi(grname4) rmordnt
+    set midi(grname3) mordent
+    set midi(grname4) rmordent
     set midi(grname5) slide
     set midi(grname6) trill
     set midi(grseq1) "1"
@@ -1579,10 +1580,13 @@ pack .abc.titles.notes -fill x
 # Part 5.0          TOC
 
 ###    Table of Contents  - title index   ###
+#puts [ttk::style element names]
 ttk::style configure Treeview.Heading -font $df
+ttk::style configure Treeview -background azure2
 ttk::treeview .abc.titles.t -columns {refno key meter title}  -height 15\
         -show headings  \
         -selectmode extended -yscrollcommand {.abc.titles.ysbar set}
+#puts [.abc.titles.t configure]
 foreach col {refno key meter}  name {refnumb keysignature meter}  {
     .abc.titles.t heading $col -text $col
     .abc.titles.t heading $col -command [list SortBy $col 0]
@@ -3541,7 +3545,7 @@ proc tcl_abc_edit_menu_bar {abcfile} {
             -font $df
     $w.tools.type add cascade -label "x replace chords" -menu $w.tools.xreplacechords\
             -font $df
-    $w.tools.type add command -label "add guitar chords" -command put_guitar_chords \
+    $w.tools.type add command -label "add guitar chords" -command "put_guitar_chords bars" \
             -font $df
     $w.tools.type add command -label "solfege vocalization" -command solfege_vocalization \
             -font $df
@@ -4516,18 +4520,21 @@ proc showkeys {from} {
 proc keytosf {keysig} {
     #from key signature computes number of sharps/flats, mode
     #and first key in scale.
-    global mode tonic
-    set s [regexp {([A-G]|none)(#*|b*)(.*)} $keysig match tonic sub2 sub3]
+    global mode tonic modename
+    set s [regexp {([A-G]|none)(#*|b*)(.*)} $keysig match tonic sub2 modename]
     if {$s < 1} {puts "can't understand key signature $keysig"
         return}
-    #puts "$tonic $sub2 $sub3"
+    #puts "$tonic $sub2 $modename"
     if {[string compare $tonic "none"] == 0} {set tonic C}
     set sf [expr [string first $tonic FCGDAEB] -1]
     if {$sub2 == "#"} {set sf [expr $sf + 7]}
     if {$sub2 == "b"} {set sf [expr $sf - 7]}
-    if {[string length $sub3] > 0} {set sub3 [string tolower $sub3]}
-    if {[string length $sub3] > 3} {set sub3 [string range $sub3 0 2 ]}
-    set mode [lsearch -exact "maj min m aeo loc ion dor phr lyd mix" $sub3]
+    if {[string length $modename] > 0} {set modename [string tolower $modename]} else {
+        set modename "maj"
+        }
+    if {[string length $modename] > 3} {set modename [string range $modename 0 2 ]}
+    if {$modename == "m"} {set modename "min"}
+    set mode [lsearch -exact "maj min m aeo loc ion dor phr lyd mix" $modename]
     if {$mode == -1} {set mode 0}
     #puts "mode = $mode"
     if {$mode >= 0} {set sf \
@@ -4550,9 +4557,11 @@ proc shift_note_wrap {note shift} {
 proc guitar_toolbox {keysig} {
     global df
     global keyorder keymap
-    global tonic mode
+    global tonic mode modename
     global rootname triadname chordno
     global progression
+    global preferredchords
+    global chordtype
     # thanks to James Allwright for writing the original code in C
     # (parsekey and event_key see parseabc.c and store.c).
     set chordtype {0 1 1 0 0 1 2 0 1 1 0 0 1 1}
@@ -4568,7 +4577,9 @@ proc guitar_toolbox {keysig} {
     if {[string compare $keysig hp] == 0} {set keysig A}
     if {[string compare $keysig none] ==0} {set keysig C}
     set sf  [keytosf $keysig]
+    #puts "guitar_toolbox modename = $modename"
     setkeymap $sf
+    #puts "preferred chords = $preferredchords($modename)"
     set i1 [string first $tonic $keyorder]
     set i2 [lindex $modeloc $mode]
     set g .abcedit.pane.toolbox.guitartool
@@ -4595,7 +4606,7 @@ proc guitar_toolbox {keysig} {
                 m9  maj9  M9 11  dim9\
                 sus  sus9  7sus4  7sus9  5}
     
-    menubutton $g.ctypes -menu $g.ctypes.items -text types -font $df -relief raised
+    menubutton $g.ctypes -menu $g.ctypes.items -text types -font $df -relief raised -width 10
     menu $g.ctypes.items -tearoff 0
     set i 0
     set flag 0
@@ -4608,42 +4619,50 @@ proc guitar_toolbox {keysig} {
     
     
     menubutton $g.invert -menu $g.invert.items -text inversion -font $df\
-            -relief raised
+            -relief raised -width 10
     menu $g.invert.items -tearoff 0
     $g.invert.items add radiobutton -label none -font $df -command {invertchord 0}
     $g.invert.items add radiobutton -label first -font $df -command {invertchord 1}
     $g.invert.items add radiobutton -label second -font $df -command {invertchord 2}
+
+    button $g.main -text main -font $df -command preferredchords_interface -width 8
+    tooltip::tooltip $g.main "For specifying the principle chords to use for each mode."
     
-    set gl $g.cframe
     if {[string length $keysig] > 15} {set keysig [string range $keysig 0 15]...}
-    labelframe $gl -text "guitar chords\nfor $keysig" -font $df
-    grid $gl -rowspan 20
+    label $g.lab -text "guitar chords for $keysig" -font $df
+    grid $g.lab -columnspan 3 
     
     set chordno 0
-    radiobutton $gl.0 -text $triadname(0) -font $df  -indicatoron 1\
+    radiobutton $g.0 -text $triadname(0) -font $df  -indicatoron 1\
             -command "insert_chord $triadname(0)" -padx 1 -value 0 -variable chordno
     
-    grid $gl.0 -sticky w
     for {set i 1} {$i < 7} {incr i} {
-        radiobutton $gl.$i -text $triadname($i)  -font $df \
+        radiobutton $g.$i -text $triadname($i)  -font $df \
                 -command "insert_chord $triadname($i)" -value $i -variable chordno
-        grid $gl.$i -sticky w
     }
+    grid $g.0 $g.1 $g.2 -sticky w
+    grid $g.3 $g.4 $g.5 -sticky w
+    grid $g.6 -sticky w
     
-    button $g.help -text help -width 5 -font $df\
+    button $g.help -text help -width 8 -font $df\
             -command {show_message_page $hlp_guitar word
                 focus .abc
                 raise .abc .abcedit
             }
+    menubutton $g.auto -menu $g.auto.items -text auto -font $df\
+            -relief raised -width 10
+    menu $g.auto.items -tearoff 0
+    $g.auto.items add command -label bars -font $df -command {put_guitar_chords bars}
+    $g.auto.items add command -label beats -font $df -command {put_guitar_chords beats}
+    tooltip::tooltip $g.auto "Automatically insert guitar chords"
     label $g.prog -text "" -font $df
-    grid $g.help -row 1 -column 2
-    button $g.refresh -text refresh -font $df -command guitar_chord
-    grid $g.refresh -row 2 -column 2
-    grid $g.ctypes  -row 3 -column 2
-    grid $g.invert  -row 4 -column 2
-    grid $g.prog    -row 5 -column 2
+    button $g.refresh -text refresh -font $df -command guitar_chord -width 8
+    tooltip::tooltip $g.refresh "Recompute the guitar chords to use for the most recent mode."
+    grid $g.help $g.refresh $g.ctypes 
+    grid $g.invert $g.main $g.auto
+    grid $g.prog -columnspan 3
     possible_progression
-    highlight_primary_chords
+    highlight_main_chords $preferredchords($modename)
 }
 
 
@@ -4652,7 +4671,7 @@ proc qualifychord {{typeno ""}} {
     global keyorder keymap
     global rootname triadname chordno
     set triadname($chordno) $rootname($chordno)$typeno
-    set g .abcedit.pane.toolbox.guitartool.cframe
+    set g .abcedit.pane.toolbox.guitartool
     $g.$chordno configure -text $triadname($chordno) -command "insert_chord $triadname($chordno)"
 }
 
@@ -4663,7 +4682,7 @@ proc invertchord order {
     set key $rootname($chordno)
     set key [shift_note_wrap $key [expr $order*2]]
     set key $keymap($key) ;# add sharps or flats for key signature
-    set g .abcedit.pane.toolbox.guitartool.cframe
+    set g .abcedit.pane.toolbox.guitartool
     if {$order == 0} {
         $g.$chordno configure -text $triadname($chordno)\
                 -command "insert_chord $triadname($chordno)" } else {
@@ -4672,41 +4691,28 @@ proc invertchord order {
     }
 }
 
-proc highlight_primary_chords {} {
-    global mode
-    set g .abcedit.pane.toolbox.guitartool.cframe
+
+array set roman2arabic {I 1 II 2 III 3 IV 4 V 5 VI 6 VII 7}
+
+proc highlight_main_chords {mainchords} {
+    global roman2arabic
+    set g .abcedit.pane.toolbox.guitartool
     for {set i 1} {$i < 7} {incr i} {
       $g.$i configure -fg grey32 
       }
-    switch $mode {
-      0 -
-      5 { #major mode
-        $g.3 configure -fg black
-        $g.4 configure -fg black
-        }
-      1 -
-      2 -
-      3 { #minor
-        $g.3 configure -fg black
-        $g.6 configure -fg black}
-      4 {#locrian
-         $g.4 configure -fg black}
-      6 {#dorian
-         $g.1 configure -fg black
-         $g.3 configure -fg black}
-      7 {#phrygian
-         $g.1 configure -fg black
-         $g.6 configure -fg black}
-      8 {#lydian
-         $g.1 configure -fg black
-         $g.6 configure -fg black
-         }
-      9 {#mixolydian
-         $g.4 configure -fg black
-         $g.6 configure -fg black
+    #puts "mainchords = $mainchords"
+    foreach chord $mainchords {
+        #eliminate trailing o if present (for diminished)
+        set chord [string map {o ""} $chord]
+        set i [string toupper $chord]
+        set i $roman2arabic($i)
+        incr i -1
+        #puts $i
+        $g.$i configure -fg black
         }
     }
- }
+
+
 
 proc possible_progression {} {
     global triadname chordno
@@ -4714,7 +4720,7 @@ proc possible_progression {} {
     set output ""
     if {[string equal any $progression($chordno)]} {set output "any chord"} else {
         foreach chord $progression($chordno) {
-            set output "$output $triadname($chord)\n"
+            set output "$output $triadname($chord) "
         }
     }
     .abcedit.pane.toolbox.guitartool.prog configure -text $output
@@ -4728,8 +4734,9 @@ proc insert_chord {chord} {
     set notepat {(\^*|_*|=?)([A-G]\,*|[a-g]\'*|z)(/?[0-9]*|[0-9]*/*[0-9]*)}
     #puts "insert_chord"
     possible_progression
-    set nextbar [$abctxtw search | insert]
-    set nextnote [$abctxtw search  -regexp  -- $notepat insert]
+    set nextbar [$abctxtw search | insert end]
+    if {$nextbar == ""} return
+    set nextnote [$abctxtw search  -regexp  -- $notepat insert $nextbar]
     set chordbegin [$abctxtw search \"  insert $nextbar]
     #puts "nextbar = $nextbar"
     #puts "nextnote = $nextnote"
@@ -4787,7 +4794,15 @@ set hlp_guitar "Guitar tool box\n\n\
         changes and you wish to update the tool bar, merely position the insert\
         marker after the key change (indicated by the K: field command), and\
         click the refresh button. The chords in the toolbox will be replaced\
-        with the new chords appropriate for this key signature."
+        with the new chords appropriate for this key signature.\n
+
+The auto button, will insert guitar chords into the entire tune\
+	automatically using a built in algorithm. The algorithm will\
+	restrict the inserted guitar chords to a limited set which\
+	you can modify by clicking the button labeled main. A new\
+        window called preferred_chords will appear and the chosen\
+	chords are shown in red for each mode. Clicking on that chord\
+	changes its colour and status."
 
 #end of guitar.tcl
 
@@ -5225,17 +5240,17 @@ proc grace_toolbox {} {
                 focus .abc
                 raise .abc .abcedit}
     button $g.0.cfg -text cfg -font $df -width 3 -padx 0 -command grace_cfg
-    button   $g.1.1 -text $midi(grname1) -font $df -width 7\
+    button   $g.1.1 -text $midi(grname1) -font $df -width 9\
             -command "grace_note [list $midi(grseq1)]" -padx 0
-    button   $g.1.2 -text $midi(grname2) -font $df -width 7\
+    button   $g.1.2 -text $midi(grname2) -font $df -width 9\
             -command "grace_note [list $midi(grseq2)]" -padx 0
-    button   $g.1.3 -text $midi(grname3) -font $df -width 7\
+    button   $g.1.3 -text $midi(grname3) -font $df -width 9\
             -command "grace_note [list $midi(grseq3)]" -padx 0
-    button   $g.2.1 -text $midi(grname4) -font $df -width 7\
+    button   $g.2.1 -text $midi(grname4) -font $df -width 9\
             -command "grace_note [list $midi(grseq4)]" -padx 0
-    button   $g.2.2 -text $midi(grname5) -font $df -width 7\
+    button   $g.2.2 -text $midi(grname5) -font $df -width 9\
             -command "grace_note [list $midi(grseq5)]" -padx 0
-    button   $g.2.3 -text $midi(grname6) -font $df -width 7\
+    button   $g.2.3 -text $midi(grname6) -font $df -width 9\
             -command "grace_note [list $midi(grseq6)]" -padx 0
     
     pack $g.0.lab $g.0.help $g.0.cfg -side left -anchor w
@@ -5273,8 +5288,8 @@ proc reset_grace_cfg {} {
     global midi
     set midi(grname1) cut
     set midi(grname2) strike
-    set midi(grname3) mordnt
-    set midi(grname4) rmordnt
+    set midi(grname3) mordent
+    set midi(grname4) rmordent
     set midi(grname5) slide
     set midi(grname6) trill
     set midi(grseq1) "1"
@@ -20732,15 +20747,15 @@ switch_live_editor
 # End of Live Editor Functions
 
 
-# Begin Put Guitar Chords
+# Part 41.0 Generate Guitar Chords
 
-proc put_guitar_chords {} {
+proc put_guitar_chords {step} {
 global fieldtext bodytext
 global abctxtw
 
 
 set tunestring [$abctxtw get 0.0 end]
-add_guitar_chords_to_tune $tunestring
+add_guitar_chords_to_tune $tunestring $step
 
 # output
 set output_text $fieldtext
@@ -20770,13 +20785,14 @@ set instructpat {![^!]*!}
 set tripletpat {\(3}
 set sectpat {\[[0-9]+}
 
-global bar_accumulator
+global bar_accumulator beat_accumulator
 global bodytext
 global preservegchord
-global beatsize
+global beatsize barunits
 
+set lineout ""
+set beatstart 0
 set lastguitarchord ""
-set beatposition 0
 # remove existing gchords if any
 regsub -all  {"[^"]*"} $line "" result
 set line $result
@@ -20790,9 +20806,15 @@ while {$i < [string length $line]} {
    set loc1  [lindex $location 0]
    set loc2  [lindex $location 1]
    if {$loc1 == $i} {
+     set matchinfo [best_chord_match] 
+     set guitarchord [lindex $matchinfo 0]
+     if {$guitarchord != 0 && [string equal $guitarchord $lastguitarchord] != 1} {
+        append lineout " \"$guitarchord\" "}
+     append lineout [string range $line $beatstart $loc2]
+     set lastguitarchord $guitarchord
+     set beatstart [expr $loc2 + 1]
      gc_process_barline 
      set i [expr $loc2+1]
-     set beatposition $loc2
      continue}
    }
 
@@ -20802,7 +20824,7 @@ while {$i < [string length $line]} {
    set loc1  [lindex $location 0]
    set loc2  [lindex $location 1]
    if {$loc1 == $i} {
-     set sect [string range $line $loc1 $loc2]
+     #set sect [string range $line $loc1 $loc2]
      set i [expr $loc2+1]
      continue
      }
@@ -20849,24 +20871,16 @@ while {$i < [string length $line]} {
    set loc1  [lindex $location 0]
    set loc2  [lindex $location 1]
    if {$loc1 == $i} {
-     #puts "[string range $line $loc1 $loc2] $loc1 $loc2 $beatposition"
      gc_process_note [string range $line $loc1 $loc2]
-     if {$bar_accumulator >= $beatsize} {
+     if {$beat_accumulator >= $beatsize && $bar_accumulator != $barunits} {
         set matchinfo [best_chord_match] 
-        #puts "matchinfo = $matchinfo"
         set guitarchord [lindex $matchinfo 0]
         if {$guitarchord != 0 && [string equal $guitarchord $lastguitarchord] != 1} {
-           if {$beatposition == 0} {
-                set line \"$guitarchord\"$line
-              } else {
-                set original [string index $line $beatposition]
-                set outguitarchord $original\"$guitarchord\"
-                set line [string replace $line $beatposition $beatposition $outguitarchord]
-              }
-           #puts $line
-           set beatposition [expr $loc2 + [string length $guitarchord]]
-           set i [expr $loc2+ [string length $guitarchord]]
+           append lineout " \"$guitarchord\" "
+           append lineout [string range $line $beatstart $loc2]
+           #puts "lineout = $lineout"
            set lastguitarchord $guitarchord
+           set beatstart [expr $loc2 + 1]
            }
         reset_pitcharray}   else {
         #read stdin 1
@@ -20888,7 +20902,7 @@ while {$i < [string length $line]} {
  incr i
  }
 #puts $line
-set bodytext $bodytext$line\n
+set bodytext $bodytext$lineout\n
 }
 
 
@@ -20905,7 +20919,7 @@ set triplet_running 1
 # a beat. We also do not need to pay attention to tied
 # notes.
 proc gc_process_note {token} {
-  global bar_accumulator
+  global bar_accumulator beat_accumulator
   global noteunits
   global triplet_running
   global pitcharray 
@@ -20937,6 +20951,7 @@ proc gc_process_note {token} {
      if {$triplet_running > 3} {set triplet_running 0}
      }
   incr bar_accumulator $increment
+  incr beat_accumulator $increment
   #puts "$token $pitchval $bar_accumulator $increment $pitchval"
   incr pitcharray($pitchval) $increment
   return 
@@ -20953,14 +20968,15 @@ proc process_chord {token line loc} {
 
 # This is the function which processes the tune.
 # Assume only one tune per file.
-proc add_guitar_chords_to_tune {tunestring} {
- global bar_accumulator
+proc add_guitar_chords_to_tune {tunestring step} {
+ global bar_accumulator beat_accumulator
  global bar_number
  global triplet_running
  global body
  global debug
  global pitcharray
  global fieldtext bodytext
+ global barunits beatsize
  
  set fieldtext ""
  set bodytext ""
@@ -20971,6 +20987,7 @@ proc add_guitar_chords_to_tune {tunestring} {
  set body 0
  set bar_number 0
  foreach line [split $tunestring \n] {
+   #puts "line = $line"
    if {[string length $line] < 1} continue
    if {[string index $line 0] == "%"} {
       appendtext $line
@@ -20984,6 +21001,7 @@ proc add_guitar_chords_to_tune {tunestring} {
        set kfield [string range $line 2 end]
        gc_setup_key $kfield
        set bar_accumulator 0
+       set beat_accumulator 0
        if {!$body} {
          set body 1
          }
@@ -20991,7 +21009,12 @@ proc add_guitar_chords_to_tune {tunestring} {
    [string first "M:" $line] == 0} {
        appendtext $line
        gc_setup_meter $line
-        } elseif {
+       # one beat per bar ?
+       if {$step == "bars"} {set beatsize $barunits}
+       } elseif {
+   [string first "P:" $line] == 0} {
+       appendtext $line
+       } elseif {
    [string first "L:" $line] == 0} {
        appendtext $line
        gc_setup_unitlength $line
@@ -21002,13 +21025,12 @@ proc add_guitar_chords_to_tune {tunestring} {
 }
 
 
-# gc_setup_meter {line}
 # Handles M: command
 proc gc_setup_meter {line} {
   global default_gchord
   global gchordstring
-  global barunits
-  global noteunits beatsize
+  global barunits beatsize
+  global noteunits
   if {[string first "C|" $line] >= 0} {
     set m1 2
     set m2 2} elseif {
@@ -21019,7 +21041,7 @@ proc gc_setup_meter {line} {
   set barunits [expr 96 * $m1 /$m2]
   set meter $m1/$m2
 
-  if {[info exists noteunits]} return
+  #if {[info exists noteunits]} return
   if {[expr double($m1)/$m2] < 0.75} {
     gc_setup_unitlength L:1/16} else {
     gc_setup_unitlength L:1/8}
@@ -21028,11 +21050,6 @@ proc gc_setup_meter {line} {
        set beatsize 24 
      } else {
        set beatsize 36}
-
- #
- # one beat per bar
- set beatsize $barunits
- #
   }
 
 #Handles L: command
@@ -21042,8 +21059,7 @@ proc gc_setup_unitlength {line} {
   set noteunits [expr 96 * $m1 /$m2]
   }
 
-array set preferredchords {maj {I IV V} min {i iv VII} dor {i ii IV} phr {i II vii} mix {I v VII}}
-array set roman2arabic {I 1 II 2 III 3 IV 4 V 5 VI 6 VII 7}
+array set preferredchords {maj {I IV V} min {i iv VII} dor {i ii IV} phr {i II vii} lyd {I II vii}  mix {I v VII} loc {I V}}
 set fullnotekey "CDEFGABCDEFGABCDEFGABC"
 
 proc gc_setup_key {keysig} {
@@ -21066,7 +21082,7 @@ proc gc_setup_key {keysig} {
   #puts "key = $key"
   if {$mode == ""} {set mode "maj"}
   if {$mode == "m"} {set mode "min"}
-  puts "key mode = $key $mode" 
+  #puts "key mode = $key $mode" 
   # eliminate sharp or flat if present
   set key [string index $key 0]
   set loc [string first $key $fullnotekey]
@@ -21076,6 +21092,9 @@ proc gc_setup_key {keysig} {
   foreach gchord $usechords {
       set majmin ""
       if {[string is lower $gchord]} {set majmin "m"}
+      if {[string first "o" $gchord ] > 0} {set majmin "dim"}
+      #eliminate trailing o if present (for diminished chord)
+      set gchord [string map {o ""} $gchord]
       set g [string toupper $gchord]
       set g $roman2arabic($g)
       # convert to guitar chord
@@ -21101,20 +21120,21 @@ puts -nonewline "  "
 
 
 proc gc_process_barline {} {
-  global bar_accumulator
+  global bar_accumulator beat_accumulator
   global bar_number
   set bar_accumulator 0
+  set beat_accumulator 0
   incr bar_number
   }
 
 proc reset_pitcharray {} {
   # The pitcharray counts the number of times a particular note
   # appears inside a bar (or beat).
-  global bar_accumulator
+  global beat_accumulator
   global pitcharray
   #print_pitcharray
   array set pitcharray {A 0 B 0 C 0 D 0 E 0 F 0 G 0}
-  set bar_accumulator 0
+  set beat_accumulator 0
   }
 
 proc match_pitcharray_with_gchord {chord} {
@@ -21145,6 +21165,68 @@ return "$bestchord $largestmatchval"
 }
 
 # End Put Guitar Chords
+
+
+ #array set preferredchords {maj {I IV V} min {i iv VII} dor {i ii IV} phr {i II vii} lyd {I II vii} mix {I v VII} loc {io V}}
+ #set chordtype {0 1 1 0 0 1 2 0 1 1 0 0 1 1}
+
+ proc preferredchords_interface {} {
+ global preferredchords 
+ global chordtype
+ set roman_numbers {I II III IV V VI VII}
+ set modeseq {maj dor phr lyd mix min loc}
+ if {[winfo exist .preferred_chords]} return
+ toplevel .preferred_chords
+ set p .preferred_chords
+ set i 0
+ set m 0
+ label $p.head -text "principle chords to use for each mode"
+ grid $p.head -columnspan 6
+ for {set i 0} {$i < 7} {incr i} {
+   set i1 [expr $i + 1]
+   set mode [lindex $modeseq $i]
+   set chosenchords $preferredchords($mode)
+   incr m
+   label $p.$m  -text $mode
+   grid $p.$m -row $i1 -column 1
+   for {set j 0} {$j < 7} {incr j} {
+       set k [expr $i + $j]
+       #puts -nonewline " [lindex $chordtype $k]"
+       set chordcode [lindex $roman_numbers $j]
+       set colour "blue"
+       if {[lindex $chordtype $k] == 1} {
+          set chordcode [string tolower $chordcode]
+       } elseif {[lindex $chordtype $k] == 2} {
+          set chordcode [string tolower $chordcode]
+          append chordcode "o"
+         } 
+       if {[lsearch $chosenchords $chordcode] > -1} {
+          set colour "red"
+          }
+       set j1 [expr $j+2]
+       incr m
+       button $p.$m -text $chordcode -fg $colour -command "modify_preferredchords $mode $chordcode $m"
+       grid $p.$m -row $i1 -column $j1
+       #puts -nonewline " $chordcode"
+       }
+   }
+}
+
+ proc modify_preferredchords {mode chord m} {
+   # inserts chord in preferredchords(mode) if missing, otherwise deletes
+   # chord from preferredchords(mode)
+   global preferredchords
+   set idx [lsearch $preferredchords($mode) $chord]
+   if {$idx < 0} {
+     lappend preferredchords($mode) $chord
+     .preferred_chords.$m configure -fg red
+  } else {
+     set preferredchords($mode) [lreplace $preferredchords($mode) $idx $idx]
+     .preferred_chords.$m configure -fg blue
+  }
+ }
+
+
 
 
 
