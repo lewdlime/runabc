@@ -2,7 +2,7 @@
 
 #!/bin/sh
 # the next line restarts using wish \
-exec wish8.5 "$0" "$@"
+exec wish8.6 "$0" "$@"
 #
 # runabc.tcl - by Seymour Shlien  fy733@ncf.ca
 # This is graphics user interface to the abc2midi and abc2ps programs.
@@ -33,8 +33,8 @@ exec wish8.5 "$0" "$@"
 #      http://ifdo.pugmarks.com/~seymour/runabc/top.html
 
 
-set runabc_version 1.979
-set runabc_date "(December 27 2015 11:00)"
+set runabc_version 1.983
+set runabc_date "(January 22 2017 20:15)"
 set tcl_version [info tclversion]
 set startload [clock clicks -milliseconds]
 #lappend auto_path /usr/share/tcltk/tk8.5
@@ -2317,11 +2317,12 @@ proc title_selected {} {
     set index [.abc.titles.t selection]
     #puts "title_selected =  [winfo exist .live]"
     #puts "title_selected index = $index"
-    set xref [lindex [.abc.titles.t item $index -values] 0]
+    # in case index is a list 
+    set xref [lindex [.abc.titles.t item [lindex $index 0] -values] 0]
     #puts "xref = $xref"
     if {$midi(live_editor)} {
        if {![winfo exist .live]} {switch_live_editor}
-       set tunestart $fileseek($index)
+       set tunestart $fileseek([lindex $index 0])
        set tuneend [update_live_editor $tunestart $xref]
        .live.right.editor.t edit modified 0
        }
@@ -20338,8 +20339,19 @@ proc update_musicscore {tunecontent} {
     } else {
         set psheader_lines 0
         set atunecontent $tunecontent}
-    set exec_out "exec [list $midi(path_abcm2ps)] - -A -s $midi(livescale)   << ..."
-    catch {exec  [list $midi(path_abcm2ps)] - -A -s $midi(livescale)  << $atunecontent} result
+
+    # cannot handle long file names when input comes from stdin
+    # abcm2ps - feature. This prevents opening abcm2ps when in
+    # c:/program files (x86)/runabc/abcm2ps. 2017-01-22.
+
+    set out_fd [open "X.tmp" w]
+    puts $out_fd $atunecontent
+    close $out_fd
+
+    set exec_out "exec [list $midi(path_abcm2ps)] X.tmp -A -s $midi(livescale)   << ..."
+    #catch {exec  [list $midi(path_abcm2ps)] X.tmp -A -s $midi(livescale)  << $atunecontent} result
+    set cmd "exec  [list $midi(path_abcm2ps)] X.tmp -A -s $midi(livescale)  << $atunecontent" 
+    catch {eval $cmd} result
     append exec_out "\n$result"
     set cmd "file delete [glob -nocomplain *.pgm]"
     catch {eval $cmd}
@@ -20353,6 +20365,8 @@ proc update_musicscore {tunecontent} {
          set npgms [llength $result]}
     $cmn read out$pgmindex.pgm
     .live.right.header.middle configure -text "1/$npgms"
+    extract_notes_from_ps 
+    if {$midi(livehotspots)} {show_objects 1} 
 }
 
 
@@ -20371,7 +20385,8 @@ proc extract_notes_from_ps {} {
     # the note heads.
     global objectlist psscale objectpage
 
-    set psscale 0.75
+    #puts "extract_notes_from_ps"
+    if {[info exist psscale]} {unset psscale}
     array unset objectpage
 
     set inhandle  [open "Out.ps" r ]
@@ -20396,15 +20411,31 @@ proc extract_notes_from_ps {} {
 
         set match [scan $line "gsave %f %f T" tx ty]
         if {$match == 2} {
+            #puts $line
             set ytrans [expr $ty - 792]
+            #puts "ytrans = $ytrans"
             continue
+            }
+
+        # for abcm2ps versions 8.9.*
+        set match [scan $line "gsave %f dup scale %f %f T" xscale tx ty]
+        if {$match == 3} {
+            #puts $line
+            set ytrans [expr $ty*$xscale - 792]
+            set psscale $xscale
+            #puts "ytrans = $ytrans psscale = $psscale"
+            set match 0
             }
 
         set match [scan $line "%f %s %s" xscale c1 c2]
         if {$match == 3} {
             if {$c1 == "dup" && $c2 == "scale"} {
-              set psscale $xscale
+              #puts "line = $line"
+              if {[info exist psscale] == 1} {
+                 set psscale [expr $xscale * $psscale]} else {
+                 set psscale $xscale}
               #puts "psscale = $psscale"
+              set match 0
               continue
               }
             }
@@ -20451,7 +20482,6 @@ for {set i 0} {$i < $nobject} {incr i} {
     if {$d < $min_d} {set min_i $i
                       set min_d $d}
     }
-
 if {$min_d < 150} {
     set obj [lindex $objectlist($page) $min_i]
     set r [lindex $obj 2]
@@ -20462,7 +20492,7 @@ if {$min_d < 150} {
     focus .live.right.editor.t
    .live.right.editor.t mark set insert $r.$c
    .live.right.editor.t  see $r.$c
-    return "$r $c $min_d"
+   #puts "row = $r"
     }
 
 return ""
@@ -20630,6 +20660,7 @@ $wmenu2 add radiobutton -label "0.80" -command "live_scale 0.80"
 $wmenu2 add radiobutton -label "0.85" -command "live_scale 0.85"
 $wmenu2 add radiobutton -label "0.90" -command "live_scale 0.90"
 $wmenu2 add radiobutton -label "0.95" -command "live_scale 0.95"
+$wmenu2 add radiobutton -label "1.00" -command "live_scale 1.00"
 
 button $head.help -text "help" -command {show_message_page $hlp_live_editor word}
 
@@ -20688,7 +20719,8 @@ wm geometry .live $livegeom
 
 proc countlines_in {string} {
         set rc [llength [split $string "\n"]] 
-        incr rc -1
+        # split adds an empty object after the last \n
+        if {$rc > 0} {incr rc -1}
         return $rc
  }
 
